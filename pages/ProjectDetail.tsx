@@ -6,9 +6,9 @@ import { ExtractionResult, ConfidenceScore, ExtractionStatus } from '../types';
 import { AuditModal } from '../components/AuditModal';
 import { AddTargetModal, EditProjectModal } from '../components/ProjectModals';
 import { generateExecutiveSummary, simulateExtraction, getCampusLocation } from '../services/geminiService';
-import { Search, RefreshCw, Bot, AlertTriangle, CheckCircle, ExternalLink, Eye, Download, Plus, Play, Clock, BarChart3, Table as TableIcon, Trash2, Pencil, MapPin, XCircle } from 'lucide-react';
+import { Search, RefreshCw, Bot, AlertTriangle, CheckCircle, ExternalLink, Eye, Download, Plus, Play, Clock, BarChart3, Table as TableIcon, Trash2, Pencil, MapPin, XCircle, Flag, Check, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart as RePieChart, Pie, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart as RePieChart, Pie, Legend, LineChart, Line } from 'recharts';
 import { ChatAssistant } from '../components/ChatAssistant';
 
 export const ProjectDetail: React.FC = () => {
@@ -35,6 +35,10 @@ export const ProjectDetail: React.FC = () => {
 
   // --- Selection State ---
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // --- Editing State ---
+  const [editingTuitionId, setEditingTuitionId] = useState<string | null>(null);
+  const [editingTuitionValue, setEditingTuitionValue] = useState<string>('');
 
   // Filter logic
   const filteredResults = projectResults.filter(result => 
@@ -66,7 +70,18 @@ export const ProjectDetail: React.FC = () => {
       { name: 'Low', value: filteredResults.filter(r => r.confidence_score === ConfidenceScore.LOW).length, color: '#f97316' },
     ].filter(d => d.value > 0);
 
-    return { pricing: validData, confidence: confidenceData };
+    // Placeholder data for tuition trends over time
+    // In a real implementation, this would track historical tuition changes
+    const trendData = [
+      { year: '2020', avgTuition: 48000 },
+      { year: '2021', avgTuition: 49500 },
+      { year: '2022', avgTuition: 51200 },
+      { year: '2023', avgTuition: 53000 },
+      { year: '2024', avgTuition: 54800 },
+      { year: '2025', avgTuition: 56500 },
+    ];
+
+    return { pricing: validData, confidence: confidenceData, trends: trendData };
   }, [filteredResults]);
 
   const handleAudit = (result: ExtractionResult) => {
@@ -233,7 +248,7 @@ export const ProjectDetail: React.FC = () => {
 
   const handleBulkDelete = () => {
     if (selectedIds.size === 0) return;
-    
+
     if (window.confirm(`Are you sure you want to delete ${selectedIds.size} selected items?`)) {
       // Convert Set to Array to iterate
       Array.from(selectedIds).forEach(id => {
@@ -246,6 +261,26 @@ export const ProjectDetail: React.FC = () => {
       });
       setSelectedIds(new Set());
     }
+  };
+
+  const handleStartEditTuition = (result: ExtractionResult) => {
+    setEditingTuitionId(result.id);
+    setEditingTuitionValue(result.tuition_amount || '');
+  };
+
+  const handleSaveTuition = (resultId: string) => {
+    updateResult(resultId, { tuition_amount: editingTuitionValue });
+    setEditingTuitionId(null);
+    setEditingTuitionValue('');
+  };
+
+  const handleCancelEditTuition = () => {
+    setEditingTuitionId(null);
+    setEditingTuitionValue('');
+  };
+
+  const handleToggleFlag = (result: ExtractionResult) => {
+    updateResult(result.id, { is_flagged: !result.is_flagged });
   };
 
   if (!project) return <div className="p-8">Project not found</div>;
@@ -402,8 +437,8 @@ export const ProjectDetail: React.FC = () => {
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-4 py-4 w-12 text-center">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
                       onChange={handleSelectAll}
                       checked={filteredResults.length > 0 && selectedIds.size === filteredResults.length}
@@ -411,8 +446,8 @@ export const ProjectDetail: React.FC = () => {
                   </th>
                   <th className="px-6 py-4 font-semibold text-slate-700">School / Program</th>
                   <th className="px-6 py-4 font-semibold text-slate-700">Tuition</th>
-                  <th className="px-6 py-4 font-semibold text-slate-700">Location</th>
                   <th className="px-6 py-4 font-semibold text-slate-700">Confidence</th>
+                  <th className="px-6 py-4 font-semibold text-slate-700 text-center w-20">Flag</th>
                   <th className="px-6 py-4 font-semibold text-slate-700 text-right">Actions</th>
                 </tr>
               </thead>
@@ -432,10 +467,43 @@ export const ProjectDetail: React.FC = () => {
                       <div className="text-xs text-slate-500 mt-0.5">{result.program_name}</div>
                     </td>
                     <td className="px-6 py-4">
-                      {result.status === ExtractionStatus.SUCCESS ? (
-                        <div>
-                          <span className="font-semibold text-slate-900">{result.tuition_amount}</span>
-                          <div className="text-xs text-slate-400">{result.tuition_period}</div>
+                      {editingTuitionId === result.id ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={editingTuitionValue}
+                            onChange={(e) => setEditingTuitionValue(e.target.value)}
+                            className="px-2 py-1 border border-brand-300 rounded text-sm w-32 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleSaveTuition(result.id)}
+                            className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                            title="Save"
+                          >
+                            <Check size={16} />
+                          </button>
+                          <button
+                            onClick={handleCancelEditTuition}
+                            className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Cancel"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ) : result.status === ExtractionStatus.SUCCESS ? (
+                        <div className="flex items-center gap-2 group/tuition">
+                          <div>
+                            <span className="font-semibold text-slate-900">{result.tuition_amount}</span>
+                            <div className="text-xs text-slate-400">{result.tuition_period}</div>
+                          </div>
+                          <button
+                            onClick={() => handleStartEditTuition(result)}
+                            className="p-1 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded transition-colors opacity-0 group-hover/tuition:opacity-100"
+                            title="Edit Tuition"
+                          >
+                            <Pencil size={14} />
+                          </button>
                         </div>
                       ) : result.status === ExtractionStatus.PENDING ? (
                           <div className="flex items-center gap-2 text-slate-400 italic">
@@ -455,23 +523,6 @@ export const ProjectDetail: React.FC = () => {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      {result.location_data ? (
-                        <a href={result.location_data.map_url} target="_blank" rel="noreferrer" className="flex items-start gap-1.5 text-slate-600 hover:text-brand-600 max-w-[200px]">
-                           <MapPin size={14} className="mt-0.5 flex-shrink-0 text-brand-500" />
-                           <span className="text-xs truncate">{result.location_data.address}</span>
-                        </a>
-                      ) : (
-                        <button 
-                          onClick={() => handleLocateCampus(result)}
-                          disabled={locatingItems[result.id]}
-                          className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-brand-600 transition-colors"
-                        >
-                          {locatingItems[result.id] ? <RefreshCw size={12} className="animate-spin"/> : <MapPin size={12} />}
-                          {locatingItems[result.id] ? 'Locating...' : 'Find Location'}
-                        </button>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         {result.status === ExtractionStatus.NOT_FOUND ? (
                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
@@ -479,8 +530,8 @@ export const ProjectDetail: React.FC = () => {
                            </span>
                         ) : result.status === ExtractionStatus.PENDING ? (
                           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              isBatchProcessing && !processingItems[result.id] 
-                                  ? 'bg-slate-50 text-slate-400 border border-slate-200' 
+                              isBatchProcessing && !processingItems[result.id]
+                                  ? 'bg-slate-50 text-slate-400 border border-slate-200'
                                   : 'bg-slate-100 text-slate-600'
                           }`}>
                              <Clock size={12} /> {isBatchProcessing && !processingItems[result.id] ? 'Queued' : 'Pending'}
@@ -496,6 +547,19 @@ export const ProjectDetail: React.FC = () => {
                           </span>
                         )}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <button
+                        onClick={() => handleToggleFlag(result)}
+                        className={`p-1.5 rounded transition-colors ${
+                          result.is_flagged
+                            ? 'text-red-600 bg-red-50 hover:bg-red-100'
+                            : 'text-slate-300 hover:text-red-600 hover:bg-red-50'
+                        }`}
+                        title={result.is_flagged ? 'Unflag entry' : 'Flag entry for review'}
+                      >
+                        <Flag size={16} fill={result.is_flagged ? 'currentColor' : 'none'} />
+                      </button>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -553,7 +617,8 @@ export const ProjectDetail: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in-up">
+        <div className="space-y-6 animate-fade-in-up">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
            {/* Chart 1: Competitive Landscape */}
            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
               <h3 className="font-semibold text-slate-900 mb-4">Competitor Pricing Landscape</h3>
@@ -564,8 +629,8 @@ export const ProjectDetail: React.FC = () => {
                       <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                       <XAxis type="number" hide />
                       <YAxis dataKey="name" type="category" width={120} tick={{fontSize: 10}} />
-                      <Tooltip 
-                        contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} 
+                      <Tooltip
+                        contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
                         formatter={(value: any) => [`$${value.toLocaleString()}`, 'Tuition']}
                       />
                       <Bar dataKey="amount" fill="#3b82f6" radius={[0, 4, 4, 0]}>
@@ -617,6 +682,47 @@ export const ProjectDetail: React.FC = () => {
                 </div>
               )}
            </div>
+          </div>
+
+          {/* Chart 3: Tuition Trends Over Time */}
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-slate-900">Tuition Trends Over Time</h3>
+              <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">Placeholder Data</span>
+            </div>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData.trends} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="year"
+                    tick={{fontSize: 12}}
+                    label={{ value: 'Academic Year', position: 'insideBottom', offset: -5 }}
+                  />
+                  <YAxis
+                    tick={{fontSize: 12}}
+                    label={{ value: 'Average Tuition ($)', angle: -90, position: 'insideLeft' }}
+                    tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                  />
+                  <Tooltip
+                    contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
+                    formatter={(value: any) => [`$${value.toLocaleString()}`, 'Avg. Tuition']}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="avgTuition"
+                    stroke="#6366f1"
+                    strokeWidth={3}
+                    dot={{ fill: '#6366f1', r: 5 }}
+                    activeDot={{ r: 7 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              <p className="text-xs text-slate-400 mt-2 text-center">
+                This is placeholder data showing hypothetical tuition trends. Historical tracking feature coming soon.
+              </p>
+            </div>
+          </div>
         </div>
       )}
       

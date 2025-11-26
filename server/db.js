@@ -51,7 +51,8 @@ export async function initializeDatabase() {
         source_url TEXT NOT NULL,
         validated_sources JSONB NOT NULL DEFAULT '[]'::jsonb,
         extraction_date TEXT NOT NULL,
-        raw_content TEXT NOT NULL
+        raw_content TEXT NOT NULL,
+        is_flagged BOOLEAN DEFAULT FALSE
       )
     `;
 
@@ -60,6 +61,18 @@ export async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_results_project_id
       ON extraction_results(project_id)
     `;
+
+    // Add is_flagged column if it doesn't exist (migration)
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT FALSE
+      `;
+      console.log('✅ Migration: is_flagged column added');
+    } catch (error) {
+      // Column might already exist, ignore error
+      console.log('ℹ️  Migration: is_flagged column already exists or migration failed');
+    }
 
     console.log('✅ Database schema initialized successfully');
   } catch (error) {

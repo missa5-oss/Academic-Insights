@@ -124,7 +124,7 @@ router.put('/:id', async (req, res) => {
       tuition_amount, tuition_period, academic_year, cost_per_credit,
       total_credits, program_length, remarks, location_data,
       confidence_score, status, source_url, validated_sources,
-      extraction_date, raw_content
+      extraction_date, raw_content, is_flagged
     } = req.body;
 
     const [result] = await sql`
@@ -143,7 +143,8 @@ router.put('/:id', async (req, res) => {
         source_url = COALESCE(${source_url}, source_url),
         validated_sources = COALESCE(${validated_sources ? JSON.stringify(validated_sources) : null}, validated_sources),
         extraction_date = COALESCE(${extraction_date}, extraction_date),
-        raw_content = COALESCE(${raw_content}, raw_content)
+        raw_content = COALESCE(${raw_content}, raw_content),
+        is_flagged = CASE WHEN ${is_flagged}::boolean IS NULL THEN is_flagged ELSE ${is_flagged}::boolean END
       WHERE id = ${req.params.id}
       RETURNING *
     `;

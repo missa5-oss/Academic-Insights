@@ -39,7 +39,7 @@ export interface ExtractionResult {
   tuition_amount: string | null;
   tuition_period: string; // e.g. "per year", "per credit"
   academic_year: string;
-  
+
   // Detailed Metadata
   cost_per_credit?: string | null;
   total_credits?: string | null;
@@ -51,12 +51,15 @@ export interface ExtractionResult {
 
   confidence_score: ConfidenceScore;
   status: ExtractionStatus;
-  
+
   source_url: string; // Primary source for table view
   validated_sources: ValidatedSource[]; // Top 2 sources for audit
 
   extraction_date: string;
   raw_content: string; // Simulated raw HTML/Text for auditing
+
+  // Manual flagging for errors
+  is_flagged?: boolean;
 }
 
 export interface Project {
