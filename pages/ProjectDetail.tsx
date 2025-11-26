@@ -349,13 +349,18 @@ export const ProjectDetail: React.FC = () => {
             />
           </div>
           
-          {selectedIds.size > 0 && user?.role === 'Admin' && (
+          {user?.role === 'Admin' && (
              <button
                 onClick={handleBulkDelete}
-                className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors animate-fade-in-up"
+                disabled={selectedIds.size === 0}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors animate-fade-in-up ${
+                  selectedIds.size > 0 
+                    ? 'bg-red-50 text-red-700 hover:bg-red-100' 
+                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                }`}
              >
                 <Trash2 size={16} />
-                Delete ({selectedIds.size})
+                {selectedIds.size > 0 ? `Delete (${selectedIds.size})` : 'Delete'}
              </button>
           )}
 
