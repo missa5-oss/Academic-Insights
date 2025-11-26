@@ -20,10 +20,10 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const STORAGE_KEYS = {
-  PROJECTS: 'academica_projects_v1',
-  RESULTS: 'academica_results_v1',
   USER: 'academica_user_v1'
 };
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // --- Authentication State ---
@@ -51,37 +51,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // --- Data State ---
-  // Initialize from LocalStorage or fallback to empty array
-  const [projects, setProjects] = useState<Project[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      console.error("Failed to load projects from storage", e);
-      return [];
-    }
-  });
+  // Fetch from API
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [results, setResults] = useState<ExtractionResult[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [results, setResults] = useState<ExtractionResult[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.RESULTS);
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      console.error("Failed to load results from storage", e);
-      return [];
-    }
-  });
-
-  // Persist to LocalStorage whenever state changes
+  // Fetch initial data from API
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
-  }, [projects]);
+    const fetchData = async () => {
+      try {
+        const [projectsRes, resultsRes] = await Promise.all([
+          fetch(`${API_URL}/api/projects`),
+          fetch(`${API_URL}/api/results`)
+        ]);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.RESULTS, JSON.stringify(results));
-  }, [results]);
+        if (projectsRes.ok && resultsRes.ok) {
+          const projectsData = await projectsRes.json();
+          const resultsData = await resultsRes.json();
+          setProjects(projectsData);
+          setResults(resultsData);
+        }
+      } catch (error) {
+        console.error('Failed to fetch data from API:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const addProject = (name: string, description: string) => {
+    fetchData();
+  }, []);
+
+  const addProject = async (name: string, description: string) => {
     const newProject: Project = {
       id: `p-${Date.now()}`,
       name,
@@ -91,28 +91,65 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       status: 'Active',
       results_count: 0
     };
-    setProjects(prev => [newProject, ...prev]);
+
+    try {
+      const response = await fetch(`${API_URL}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newProject)
+      });
+
+      if (response.ok) {
+        const created = await response.json();
+        setProjects(prev => [created, ...prev]);
+      }
+    } catch (error) {
+      console.error('Failed to add project:', error);
+    }
   };
 
-  const editProject = (id: string, name: string, description: string) => {
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, name, description } : p));
+  const editProject = async (id: string, name: string, description: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/projects/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description })
+      });
+
+      if (response.ok) {
+        const updated = await response.json();
+        setProjects(prev => prev.map(p => p.id === id ? updated : p));
+      }
+    } catch (error) {
+      console.error('Failed to edit project:', error);
+    }
   };
 
-  const deleteProject = (id: string) => {
-    // Delete project
-    setProjects(prev => prev.filter(p => p.id !== id));
-    // Delete associated results
-    setResults(prev => prev.filter(r => r.project_id !== id));
+  const deleteProject = async (id: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/projects/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        // Delete project from state
+        setProjects(prev => prev.filter(p => p.id !== id));
+        // Delete associated results (cascade handled by DB, but update state)
+        setResults(prev => prev.filter(r => r.project_id !== id));
+      }
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+    }
   };
 
   // Consolidated function to handle both single and bulk additions
-  const addTargets = (projectId: string, targets: { schoolName: string; programName: string }[]) => {
+  const addTargets = async (projectId: string, targets: { schoolName: string; programName: string }[]) => {
     const timestamp = Date.now();
-    
+
     const newResults: ExtractionResult[] = targets.map((t, index) => {
       // Robust ID generation: timestamp + index + random string to ensure uniqueness even in large batches
       const uniqueId = `r-${timestamp}-${index}-${Math.random().toString(36).substr(2, 9)}`;
-      
+
       return {
         id: uniqueId,
         project_id: projectId,
@@ -134,44 +171,125 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       };
     });
 
-    setResults(prev => [...newResults, ...prev]);
-    
-    // Update project count
-    setProjects(prev => prev.map(p => 
-      p.id === projectId ? { ...p, results_count: p.results_count + targets.length } : p
-    ));
+    try {
+      const response = await fetch(`${API_URL}/api/results/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ results: newResults })
+      });
+
+      if (response.ok) {
+        const created = await response.json();
+        setResults(prev => [...created, ...prev]);
+
+        // Update project count
+        await fetch(`${API_URL}/api/projects/${projectId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ results_count: (projects.find(p => p.id === projectId)?.results_count || 0) + targets.length })
+        });
+
+        setProjects(prev => prev.map(p =>
+          p.id === projectId ? { ...p, results_count: p.results_count + targets.length } : p
+        ));
+      }
+    } catch (error) {
+      console.error('Failed to add targets:', error);
+    }
   };
 
-  const updateResult = (id: string, updates: Partial<ExtractionResult>) => {
-    setResults(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
-    
-    // If extraction succeeded, update project last run
-    if (updates.status === ExtractionStatus.SUCCESS || updates.status === ExtractionStatus.NOT_FOUND) {
-        const result = results.find(r => r.id === id);
-        if (result) {
+  const updateResult = async (id: string, updates: Partial<ExtractionResult>) => {
+    try {
+      const response = await fetch(`${API_URL}/api/results/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+
+      if (response.ok) {
+        const updated = await response.json();
+        setResults(prev => prev.map(r => r.id === id ? updated : r));
+
+        // If extraction succeeded, update project last run
+        if (updates.status === ExtractionStatus.SUCCESS || updates.status === ExtractionStatus.NOT_FOUND) {
+          const result = results.find(r => r.id === id);
+          if (result) {
             const today = new Date().toISOString().slice(0, 16).replace('T', ' ');
-            setProjects(prev => prev.map(p => 
-                p.id === result.project_id ? { ...p, last_run: today } : p
+
+            await fetch(`${API_URL}/api/projects/${result.project_id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ last_run: today })
+            });
+
+            setProjects(prev => prev.map(p =>
+              p.id === result.project_id ? { ...p, last_run: today } : p
             ));
+          }
         }
+      }
+    } catch (error) {
+      console.error('Failed to update result:', error);
     }
   };
 
-  const deleteResult = (id: string, projectId: string) => {
-    setResults(prev => prev.filter(r => r.id !== id));
-    
-    // Update project count directly using the passed projectId
-    setProjects(prev => prev.map(p => 
-      p.id === projectId ? { ...p, results_count: Math.max(0, p.results_count - 1) } : p
-    ));
+  const deleteResult = async (id: string, projectId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/results/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        setResults(prev => prev.filter(r => r.id !== id));
+
+        // Update project count
+        const currentCount = projects.find(p => p.id === projectId)?.results_count || 0;
+        await fetch(`${API_URL}/api/projects/${projectId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ results_count: Math.max(0, currentCount - 1) })
+        });
+
+        setProjects(prev => prev.map(p =>
+          p.id === projectId ? { ...p, results_count: Math.max(0, p.results_count - 1) } : p
+        ));
+      }
+    } catch (error) {
+      console.error('Failed to delete result:', error);
+    }
   };
 
-  const restoreData = (data: { projects: Project[]; results: ExtractionResult[] }) => {
-    if (data.projects && Array.isArray(data.projects)) {
-      setProjects(data.projects);
-    }
-    if (data.results && Array.isArray(data.results)) {
-      setResults(data.results);
+  const restoreData = async (data: { projects: Project[]; results: ExtractionResult[] }) => {
+    try {
+      // Clear existing data first
+      const existingProjects = await fetch(`${API_URL}/api/projects`).then(r => r.json());
+      for (const project of existingProjects) {
+        await fetch(`${API_URL}/api/projects/${project.id}`, { method: 'DELETE' });
+      }
+
+      // Restore projects
+      if (data.projects && Array.isArray(data.projects)) {
+        for (const project of data.projects) {
+          await fetch(`${API_URL}/api/projects`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(project)
+          });
+        }
+        setProjects(data.projects);
+      }
+
+      // Restore results
+      if (data.results && Array.isArray(data.results)) {
+        await fetch(`${API_URL}/api/results/bulk`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ results: data.results })
+        });
+        setResults(data.results);
+      }
+    } catch (error) {
+      console.error('Failed to restore data:', error);
     }
   };
 
