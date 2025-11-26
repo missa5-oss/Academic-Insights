@@ -14,7 +14,6 @@ interface AppContextType {
   addTargets: (projectId: string, targets: { schoolName: string; programName: string }[]) => void;
   updateResult: (id: string, updates: Partial<ExtractionResult>) => void;
   deleteResult: (id: string, projectId: string) => void;
-  bulkDeleteResults: (ids: string[], projectId: string) => void;
   restoreData: (data: { projects: Project[]; results: ExtractionResult[] }) => void;
 }
 
@@ -160,23 +159,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const deleteResult = (id: string, projectId: string) => {
     setResults(prev => prev.filter(r => r.id !== id));
-
+    
     // Update project count directly using the passed projectId
-    setProjects(prev => prev.map(p =>
+    setProjects(prev => prev.map(p => 
       p.id === projectId ? { ...p, results_count: Math.max(0, p.results_count - 1) } : p
-    ));
-  };
-
-  const bulkDeleteResults = (ids: string[], projectId: string) => {
-    // Create a Set for efficient lookup
-    const idsToDelete = new Set(ids);
-
-    // Delete all results in a single state update
-    setResults(prev => prev.filter(r => !idsToDelete.has(r.id)));
-
-    // Update project count by the number of deleted items in a single update
-    setProjects(prev => prev.map(p =>
-      p.id === projectId ? { ...p, results_count: Math.max(0, p.results_count - ids.length) } : p
     ));
   };
 
@@ -190,7 +176,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   return (
-    <AppContext.Provider value={{ user, login, logout, projects, results, addProject, editProject, deleteProject, addTargets, updateResult, deleteResult, bulkDeleteResults, restoreData }}>
+    <AppContext.Provider value={{ user, login, logout, projects, results, addProject, editProject, deleteProject, addTargets, updateResult, deleteResult, restoreData }}>
       {children}
     </AppContext.Provider>
   );

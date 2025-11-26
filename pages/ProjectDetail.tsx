@@ -14,7 +14,7 @@ import { ChatAssistant } from '../components/ChatAssistant';
 export const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { projects, results, addTargets, updateResult, deleteResult, bulkDeleteResults, editProject, deleteProject, user } = useApp();
+  const { projects, results, addTargets, updateResult, deleteResult, editProject, deleteProject, user } = useApp();
   
   const project = projects.find(p => p.id === id);
   const projectResults = results.filter(r => r.project_id === id);
@@ -233,12 +233,17 @@ export const ProjectDetail: React.FC = () => {
 
   const handleBulkDelete = () => {
     if (selectedIds.size === 0) return;
-
+    
     if (window.confirm(`Are you sure you want to delete ${selectedIds.size} selected items?`)) {
-      if (project) {
-        // Use bulkDeleteResults for efficient batch deletion
-        bulkDeleteResults(Array.from(selectedIds), project.id);
-      }
+      // Convert Set to Array to iterate
+      Array.from(selectedIds).forEach(id => {
+        // We need the project ID for each item, but they all belong to this project
+        // However, standard deleteResult needs result.project_id to update counts
+        // Since we are in ProjectDetail, we know the project ID is `id` from params
+        if (project) {
+           deleteResult(id, project.id);
+        }
+      });
       setSelectedIds(new Set());
     }
   };
