@@ -171,7 +171,8 @@ export const ProjectDetail: React.FC = () => {
       "Status",
       "Confidence",
       "Remarks",
-      "Source URL"
+      "Source URL",
+      "HTML Content Snippet"
     ];
 
     const escapeCsv = (val: string | null | undefined) => {
@@ -196,7 +197,8 @@ export const ProjectDetail: React.FC = () => {
       escapeCsv(r.status),
       escapeCsv(r.confidence_score),
       escapeCsv(r.remarks),
-      escapeCsv(r.source_url)
+      escapeCsv(r.source_url),
+      escapeCsv(r.raw_content)
     ].join(","));
 
     const csvContent = [headers.join(","), ...rows].join("\n");
