@@ -37,57 +37,57 @@ export const Dashboard: React.FC = () => {
   if (completedResults.length > 0) {
     if (confidencePercentage >= 85) {
       confidenceLabel = "High Accuracy";
-      confidenceTextColor = "text-green-600";
-      confidenceIconStyle = "bg-emerald-50 text-emerald-600";
+      confidenceTextColor = "text-jhu-green";
+      confidenceIconStyle = "bg-green-50 text-jhu-green";
     } else if (confidencePercentage >= 60) {
       confidenceLabel = "Moderate Accuracy";
-      confidenceTextColor = "text-yellow-600";
-      confidenceIconStyle = "bg-yellow-50 text-yellow-600";
+      confidenceTextColor = "text-jhu-gold";
+      confidenceIconStyle = "bg-yellow-50 text-jhu-gold";
     } else {
       confidenceLabel = "Needs Review";
-      confidenceTextColor = "text-orange-600";
-      confidenceIconStyle = "bg-orange-50 text-orange-600";
+      confidenceTextColor = "text-jhu-accent";
+      confidenceIconStyle = "bg-red-50 text-jhu-accent";
     }
   }
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold text-slate-900">Dashboard</h2>
-        <p className="text-slate-500 mt-1">Overview of your tuition intelligence operations.</p>
+        <h2 className="text-4xl font-bold text-jhu-heritage">Dashboard</h2>
+        <p className="text-slate-600 mt-2 text-lg">Overview of your tuition intelligence operations.</p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between">
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow flex items-start justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-500">Active Projects</p>
+            <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">Active Projects</p>
             <h3 className="text-3xl font-bold text-slate-900 mt-2">{activeProjects}</h3>
-            <p className="text-xs text-green-600 font-medium mt-1">Operations Normal</p>
+            <p className="text-xs text-jhu-green font-semibold mt-1">Operations Normal</p>
           </div>
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
+          <div className="p-3 bg-blue-50 text-jhu-heritage rounded-lg">
             <Activity size={24} />
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between">
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow flex items-start justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-500">Total Schools Tracked</p>
+            <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">Total Schools Tracked</p>
             <h3 className="text-3xl font-bold text-slate-900 mt-2">{totalSchools}</h3>
-            <p className="text-xs text-slate-400 mt-1">Across all projects</p>
+            <p className="text-xs text-slate-500 mt-1">Across all projects</p>
           </div>
-          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
+          <div className="p-3 bg-sky-50 text-jhu-spirit rounded-lg">
             <Database size={24} />
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between">
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow flex items-start justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-500">Avg. Confidence Score</p>
+            <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">Avg. Confidence Score</p>
             <h3 className="text-3xl font-bold text-slate-900 mt-2">
               {completedResults.length > 0 ? `${confidencePercentage}%` : '-'}
             </h3>
-            <p className={`text-xs font-medium mt-1 ${confidenceTextColor}`}>{confidenceLabel}</p>
+            <p className={`text-xs font-semibold mt-1 ${confidenceTextColor}`}>{confidenceLabel}</p>
           </div>
           <div className={`p-3 rounded-lg ${confidenceIconStyle}`}>
             <Activity size={24} />
@@ -96,17 +96,17 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Projects List */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-900">Recent Projects</h3>
-          <button className="text-sm text-brand-600 font-medium hover:underline">View All</button>
+          <h3 className="text-xl font-semibold text-slate-900">Recent Projects</h3>
+          <button className="text-sm text-jhu-heritage font-semibold hover:underline">View All</button>
         </div>
         <div className="divide-y divide-slate-100">
           {projects.length > 0 ? projects.map((project) => (
-            <div key={project.id} className="p-6 hover:bg-slate-50 transition-colors group">
+            <div key={project.id} className="p-6 hover:bg-jhu-gray transition-colors group">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-semibold text-slate-900 group-hover:text-brand-600 transition-colors">
+                  <h4 className="font-semibold text-slate-900 group-hover:text-jhu-heritage transition-colors">
                     <Link to={`/project/${project.id}`}>{project.name}</Link>
                   </h4>
                   <p className="text-sm text-slate-500 mt-1">{project.description}</p>
@@ -120,16 +120,16 @@ export const Dashboard: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium border ${
-                    project.status === 'Active' 
-                      ? 'bg-green-50 text-green-700 border-green-200' 
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                    project.status === 'Active'
+                      ? 'bg-green-50 text-jhu-green border-green-200'
                       : 'bg-slate-100 text-slate-600 border-slate-200'
                   }`}>
                     {project.status}
                   </span>
-                  <Link 
+                  <Link
                     to={`/project/${project.id}`}
-                    className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-full transition-colors"
+                    className="p-2 text-slate-400 hover:text-jhu-heritage hover:bg-blue-50 rounded-full transition-colors"
                   >
                     <ArrowRight size={20} />
                   </Link>

@@ -15,8 +15,8 @@ const BaseModal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) =
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md animate-fade-in-up">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h3 className="font-semibold text-slate-900">{title}</h3>
-          <button onClick={onClose} className="p-1 rounded-full hover:bg-slate-100 text-slate-500">
+          <h3 className="text-xl font-semibold text-jhu-heritage">{title}</h3>
+          <button onClick={onClose} className="p-1 rounded-full hover:bg-jhu-gray text-slate-500 transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -59,7 +59,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, 
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none"
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-jhu-heritage focus:outline-none"
             placeholder="e.g. MBA Analysis 2026"
           />
         </div>
@@ -68,14 +68,14 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, 
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none h-24"
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-jhu-heritage focus:outline-none h-24"
             placeholder="Briefly describe the scope of this project..."
           />
         </div>
         <div className="flex justify-end pt-2">
           <button
             type="submit"
-            className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
+            className="px-4 py-2 bg-jhu-heritage text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-all shadow-sm"
           >
             Create Project
           </button>
@@ -123,7 +123,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({ isOpen, onCl
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none"
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-jhu-heritage focus:outline-none"
           />
         </div>
         <div>
@@ -131,13 +131,13 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({ isOpen, onCl
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none h-24"
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-jhu-heritage focus:outline-none h-24"
           />
         </div>
         <div className="flex justify-end pt-2">
           <button
             type="submit"
-            className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
+            className="px-4 py-2 bg-jhu-heritage text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-all shadow-sm"
           >
             Save Changes
           </button>
@@ -223,7 +223,7 @@ export const AddTargetModal: React.FC<AddTargetModalProps> = ({ isOpen, onClose,
           onClick={() => setMode('single')}
           className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             mode === 'single'
-              ? 'border-brand-600 text-brand-600'
+              ? 'border-jhu-heritage text-jhu-heritage'
               : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
@@ -234,7 +234,7 @@ export const AddTargetModal: React.FC<AddTargetModalProps> = ({ isOpen, onClose,
           onClick={() => setMode('bulk')}
           className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             mode === 'bulk'
-              ? 'border-brand-600 text-brand-600'
+              ? 'border-jhu-heritage text-jhu-heritage'
               : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
@@ -253,7 +253,7 @@ export const AddTargetModal: React.FC<AddTargetModalProps> = ({ isOpen, onClose,
                 required={mode === 'single'}
                 value={school}
                 onChange={(e) => setSchool(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-jhu-heritage focus:outline-none"
                 placeholder="e.g. Yale University"
               />
             </div>
@@ -264,7 +264,7 @@ export const AddTargetModal: React.FC<AddTargetModalProps> = ({ isOpen, onClose,
                 required={mode === 'single'}
                 value={program}
                 onChange={(e) => setProgram(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-jhu-heritage focus:outline-none"
                 placeholder="e.g. Master of Data Science"
               />
             </div>
@@ -282,7 +282,7 @@ export const AddTargetModal: React.FC<AddTargetModalProps> = ({ isOpen, onClose,
               required={mode === 'bulk'}
               value={bulkData}
               onChange={(e) => setBulkData(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:outline-none h-32"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-jhu-heritage focus:outline-none h-32"
               placeholder={'Harvard University, MBA\nStanford University, Computer Science\nYale University'}
             />
           </div>
@@ -291,7 +291,7 @@ export const AddTargetModal: React.FC<AddTargetModalProps> = ({ isOpen, onClose,
         <div className="flex justify-end pt-2">
           <button
             type="submit"
-            className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
+            className="px-4 py-2 bg-jhu-heritage text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-all shadow-sm"
           >
             {mode === 'single' ? 'Add Target' : 'Add Targets'}
           </button>

@@ -89,7 +89,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ data, isOpen, onTo
     return (
       <button
         onClick={onToggle}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-brand-600 hover:bg-brand-700 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105 z-40"
+        className="fixed bottom-6 right-6 w-14 h-14 bg-jhu-heritage hover:opacity-90 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 z-40"
       >
         <Sparkles size={24} />
       </button>
@@ -99,13 +99,13 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ data, isOpen, onTo
   return (
     <div className="fixed bottom-6 right-6 w-96 h-[500px] bg-white rounded-xl shadow-2xl flex flex-col border border-slate-200 z-40 animate-fade-in-up">
       {/* Header */}
-      <div className="px-4 py-3 bg-brand-600 text-white rounded-t-xl flex items-center justify-between">
+      <div className="px-4 py-3 bg-jhu-heritage text-white rounded-t-xl flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Bot size={18} />
           <span className="font-semibold text-sm">Tuition Analyst</span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={onToggle} className="p-1 hover:bg-brand-500 rounded text-brand-100">
+          <button onClick={onToggle} className="p-1 hover:bg-opacity-80 rounded text-white transition-all">
             <Minimize2 size={16} />
           </button>
         </div>
@@ -115,10 +115,10 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ data, isOpen, onTo
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div 
+            <div
               className={`max-w-[85%] rounded-lg px-4 py-2 text-sm ${
-                msg.role === 'user' 
-                  ? 'bg-brand-600 text-white' 
+                msg.role === 'user'
+                  ? 'bg-jhu-heritage text-white'
                   : 'bg-white border border-slate-200 text-slate-800 shadow-sm'
               }`}
             >
@@ -135,7 +135,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ data, isOpen, onTo
         {isLoading && (
           <div className="flex justify-start">
             <div className="bg-white border border-slate-200 rounded-lg px-4 py-2 shadow-sm">
-              <Loader2 size={16} className="animate-spin text-brand-600" />
+              <Loader2 size={16} className="animate-spin text-jhu-heritage" />
             </div>
           </div>
         )}
@@ -151,13 +151,13 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ data, isOpen, onTo
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Compare Yale and Harvard..."
-            className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-jhu-heritage"
             disabled={isLoading}
           />
           <button
             onClick={handleSend}
             disabled={isLoading || !input.trim()}
-            className="p-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="p-2 bg-jhu-heritage text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             <Send size={16} />
           </button>

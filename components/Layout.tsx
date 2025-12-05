@@ -20,12 +20,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">
+    <div className="flex h-screen bg-jhu-gray text-slate-900 font-sans">
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white flex flex-col flex-shrink-0 transition-all duration-300">
+      <aside className="w-64 bg-jhu-black text-white flex flex-col flex-shrink-0 transition-all duration-300">
         <div className="p-6 border-b border-slate-700">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-jhu-heritage rounded-lg flex items-center justify-center">
               <span className="font-bold text-white text-lg">A</span>
             </div>
             <h1 className="text-xl font-bold tracking-tight">Academica</h1>
@@ -38,8 +38,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             to="/"
             end
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                isActive ? 'bg-brand-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive ? 'bg-jhu-heritage text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
               }`
             }
           >
@@ -63,8 +63,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
              key={project.id}
              to={`/project/${project.id}`}
              className={({ isActive }) =>
-               `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                 isActive ? 'bg-brand-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                 isActive ? 'bg-jhu-heritage text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                }`
              }
            >
@@ -82,8 +82,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               <NavLink
                 to="/admin"
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                    isActive ? 'bg-brand-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    isActive ? 'bg-jhu-heritage text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                   }`
                 }
               >
@@ -96,7 +96,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
         <div className="p-4 border-t border-slate-700">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-brand-700 flex items-center justify-center text-xs font-medium text-white">
+            <div className="w-8 h-8 rounded-full bg-jhu-heritage flex items-center justify-center text-xs font-medium text-white">
               {user?.initials || 'U'}
             </div>
             <div className="flex-1 overflow-hidden">
@@ -118,15 +118,15 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         {/* Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-10">
           <div className="flex items-center gap-2 text-slate-500 text-sm">
-             <ShieldCheck size={16} className="text-green-600"/>
+             <ShieldCheck size={16} className="text-jhu-green"/>
              <span>System Operational</span>
              <span className="mx-2 text-slate-300">|</span>
              <span>Last crawled: Today, 09:00 AM</span>
           </div>
           <div className="flex items-center gap-4">
-             <button 
+             <button
                onClick={() => setIsModalOpen(true)}
-               className="px-4 py-1.5 text-sm font-medium text-brand-600 bg-brand-50 rounded-full hover:bg-brand-100 transition-colors"
+               className="px-4 py-2 text-sm font-semibold text-white bg-jhu-heritage rounded-lg hover:opacity-90 transition-all shadow-sm"
              >
                + New Project
              </button>

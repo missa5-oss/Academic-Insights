@@ -55,11 +55,11 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose, res
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center">
-              <History className="w-5 h-5 text-brand-600" />
+            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+              <History className="w-5 h-5 text-jhu-heritage" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Price History</h2>
+              <h2 className="text-xl font-semibold text-jhu-heritage">Price History</h2>
               {history.length > 0 && (
                 <p className="text-sm text-gray-600">
                   {history[0].school_name} - {history[0].program_name}
@@ -69,7 +69,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose, res
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-jhu-gray rounded-lg transition-colors"
           >
             <X className="w-5 h-5 text-gray-500" />
           </button>
@@ -79,7 +79,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose, res
         <div className="p-6 overflow-y-auto max-h-[calc(80vh-180px)]">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-jhu-heritage"></div>
             </div>
           ) : history.length === 0 ? (
             <div className="text-center py-12">
@@ -98,7 +98,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose, res
                     key={version.id}
                     className={`p-4 rounded-lg border-2 ${
                       isLatest
-                        ? 'border-brand-500 bg-brand-50'
+                        ? 'border-jhu-heritage bg-blue-50'
                         : 'border-gray-200 bg-white'
                     }`}
                   >
@@ -106,7 +106,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose, res
                       <div className="flex items-center gap-3">
                         <div className={`px-3 py-1 rounded-full text-sm font-semibold ${
                           isLatest
-                            ? 'bg-brand-600 text-white'
+                            ? 'bg-jhu-heritage text-white'
                             : 'bg-gray-100 text-gray-700'
                         }`}>
                           v{version.extraction_version}
@@ -198,7 +198,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose, res
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="px-4 py-2 text-gray-700 hover:bg-jhu-gray rounded-lg transition-colors font-semibold"
             >
               Close
             </button>
@@ -207,7 +207,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose, res
                 onTrackUpdate();
                 onClose();
               }}
-              className="px-4 py-2 bg-brand-600 text-white hover:bg-brand-700 rounded-lg transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-jhu-heritage text-white hover:opacity-90 rounded-lg transition-all flex items-center gap-2 font-semibold shadow-sm"
             >
               <TrendingUp className="w-4 h-4" />
               Track Price Update

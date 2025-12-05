@@ -14,14 +14,20 @@
               sans: ['Inter', 'sans-serif'],
             },
             colors: {
-              brand: {
-                50: '#f0f9ff',
-                100: '#e0f2fe',
-                500: '#0ea5e9',
-                600: '#0284c7',
-                700: '#0369a1',
-                900: '#0c4a6e',
+              jhu: {
+                heritage: '#002D72',  // Core Brand Blue - Primary buttons, headers, active states
+                spirit: '#68ACE5',    // Secondary Blue - Accents, gradients, highlights
+                green: '#007567',     // Carey Teal - Apply/Visit buttons, success states
+                lime: '#D0DA48',      // Electric Lime - High-visibility accents, data viz
+                accent: '#CF4520',    // Alert/Red - Errors, urgent notices
+                gold: '#A19261',      // Secondary Gold - Awards, certificates
+                black: '#31261D',     // Legacy Dark - High contrast text, footers
+                gray: '#F5F5F7',      // Background Gray - Page backgrounds
               }
+            },
+            borderRadius: {
+              'xl': '0.75rem',
+              '2xl': '1rem',
             }
           }
         }
@@ -30,7 +36,7 @@
     <style>
       body {
         font-family: 'Inter', sans-serif;
-        background-color: #f8fafc;
+        background-color: #F5F5F7;
       }
       /* Custom scrollbar for raw content modal */
       .raw-content-scroll::-webkit-scrollbar {

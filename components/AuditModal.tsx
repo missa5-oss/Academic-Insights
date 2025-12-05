@@ -18,17 +18,17 @@ export const AuditModal: React.FC<AuditModalProps> = ({ isOpen, onClose, data })
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <div>
-            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <FileText className="text-brand-600" size={20}/>
+            <h3 className="text-xl font-semibold text-jhu-heritage flex items-center gap-2">
+              <FileText size={20}/>
               Audit Extraction Source
             </h3>
             <p className="text-sm text-slate-500 mt-1">
               Verifying data for <span className="font-semibold text-slate-700">{data.school_name}</span>
             </p>
           </div>
-          <button 
+          <button
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-slate-200 text-slate-500 transition-colors"
+            className="p-2 rounded-full hover:bg-jhu-gray text-slate-500 transition-colors"
           >
             <X size={20} />
           </button>
@@ -67,7 +67,7 @@ export const AuditModal: React.FC<AuditModalProps> = ({ isOpen, onClose, data })
                       <span className="text-xs font-medium">Location</span>
                    </div>
                    {data.location_data ? (
-                       <a href={data.location_data.map_url} target="_blank" rel="noreferrer" className="font-semibold text-brand-600 hover:underline block truncate">
+                       <a href={data.location_data.map_url} target="_blank" rel="noreferrer" className="font-semibold text-jhu-heritage hover:underline block truncate">
                            {data.location_data.address}
                        </a>
                    ) : (
@@ -96,7 +96,7 @@ export const AuditModal: React.FC<AuditModalProps> = ({ isOpen, onClose, data })
                         </div>
                         <div className="flex-1 overflow-hidden">
                             <p className="text-sm font-semibold text-slate-800 truncate">{source.title || 'Official Source'}</p>
-                            <a href={source.url} target="_blank" rel="noreferrer" className="text-xs text-brand-600 hover:underline truncate block">
+                            <a href={source.url} target="_blank" rel="noreferrer" className="text-xs text-jhu-heritage hover:underline truncate block">
                                 {source.url}
                             </a>
                         </div>
@@ -110,7 +110,7 @@ export const AuditModal: React.FC<AuditModalProps> = ({ isOpen, onClose, data })
                      </div>
                      <div>
                        <p className="text-xs font-bold text-yellow-800 uppercase tracking-wide">Legacy Source</p>
-                       <a href={data.source_url} target="_blank" rel="noreferrer" className="text-sm text-brand-600 hover:underline break-all">
+                       <a href={data.source_url} target="_blank" rel="noreferrer" className="text-sm text-jhu-heritage hover:underline break-all">
                          {data.source_url}
                        </a>
                      </div>
@@ -131,9 +131,9 @@ export const AuditModal: React.FC<AuditModalProps> = ({ isOpen, onClose, data })
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 bg-white">
-           <button 
+           <button
              onClick={onClose}
-             className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+             className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-jhu-gray rounded-lg transition-colors"
            >
              Close
            </button>

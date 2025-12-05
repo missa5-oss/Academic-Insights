@@ -55,13 +55,13 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="flex gap-3">
               <button
                 onClick={() => window.location.reload()}
-                className="flex-1 px-4 py-2 bg-brand-600 text-white rounded hover:bg-brand-700 transition-colors"
+                className="flex-1 px-4 py-2 bg-jhu-heritage text-white rounded-lg hover:opacity-90 transition-all font-semibold"
               >
                 Reload Page
               </button>
               <button
                 onClick={() => window.location.href = '/'}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors"
+                className="flex-1 px-4 py-2 border-2 border-jhu-heritage text-jhu-heritage rounded-lg hover:bg-blue-50 transition-all font-semibold"
               >
                 Go Home
               </button>

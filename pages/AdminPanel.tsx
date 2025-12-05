@@ -106,15 +106,15 @@ export const AdminPanel: React.FC = () => {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold text-slate-900">System Administration</h2>
-        <p className="text-slate-500 mt-1">Monitor API usage, costs, and system health based on live project data.</p>
+        <h2 className="text-4xl font-bold text-jhu-heritage">System Administration</h2>
+        <p className="text-slate-600 mt-2 text-lg">Monitor API usage, costs, and system health based on live project data.</p>
       </div>
 
       {/* Database Management Section */}
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+      <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
          <div className="flex items-center gap-3 mb-6">
-            <Database className="text-brand-600" size={24} />
-            <h3 className="text-lg font-bold text-slate-900">Database Management</h3>
+            <Database className="text-jhu-heritage" size={24} />
+            <h3 className="text-xl font-semibold text-jhu-heritage">Database Management</h3>
          </div>
          
          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-6 flex items-start gap-3">
@@ -127,16 +127,16 @@ export const AdminPanel: React.FC = () => {
          </div>
 
          <div className="flex flex-col sm:flex-row gap-4">
-            <button 
+            <button
                onClick={handleBackup}
-               className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-50 transition-colors shadow-sm"
+               className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white border-2 border-jhu-heritage rounded-lg text-jhu-heritage font-semibold hover:bg-blue-50 transition-all shadow-sm"
             >
                <Download size={18} />
                Backup Database
             </button>
-            <button 
+            <button
                onClick={handleRestoreClick}
-               className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 transition-colors shadow-sm"
+               className="flex items-center justify-center gap-2 px-4 py-2.5 bg-jhu-heritage text-white rounded-lg font-semibold hover:opacity-90 transition-all shadow-sm"
             >
                <Upload size={18} />
                Restore Database
@@ -152,7 +152,7 @@ export const AdminPanel: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
            <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-purple-100 text-purple-600 rounded-lg">
                 <Cpu size={20} />
@@ -169,9 +169,9 @@ export const AdminPanel: React.FC = () => {
            <p className="text-xs text-slate-400 mt-2">Based on extraction volume</p>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-orange-100 text-orange-600 rounded-lg">
+              <div className="p-2 bg-yellow-100 text-jhu-gold rounded-lg">
                 <Server size={20} />
               </div>
               <div>
@@ -180,14 +180,14 @@ export const AdminPanel: React.FC = () => {
               </div>
            </div>
            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-             <div className="h-full bg-orange-500" style={{ width: '30%' }}></div>
+             <div className="h-full bg-jhu-gold" style={{ width: '30%' }}></div>
            </div>
            <p className="text-xs text-slate-400 mt-2">Successful/Attempted Extractions</p>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-green-100 text-green-600 rounded-lg">
+              <div className="p-2 bg-green-50 text-jhu-green rounded-lg">
                 <DollarSign size={20} />
               </div>
               <div>
@@ -196,7 +196,7 @@ export const AdminPanel: React.FC = () => {
               </div>
            </div>
            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-             <div className="h-full bg-green-500" style={{ width: '15%' }}></div>
+             <div className="h-full bg-jhu-green" style={{ width: '15%' }}></div>
            </div>
            <p className="text-xs text-slate-400 mt-2">Cumulative project cost</p>
         </div>
@@ -204,8 +204,8 @@ export const AdminPanel: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Token Usage Chart */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-          <h3 className="font-semibold text-slate-900 mb-6">AI Token Usage (Last 7 Days)</h3>
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+          <h3 className="text-xl font-semibold text-slate-900 mb-6">AI Token Usage (Last 7 Days)</h3>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={usageStats.chartData}>
@@ -213,15 +213,15 @@ export const AdminPanel: React.FC = () => {
                 <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
                 <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
-                <Bar dataKey="tokens" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="Tokens" />
+                <Bar dataKey="tokens" fill="#002D72" radius={[4, 4, 0, 0]} name="Tokens" />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Cost Chart */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-          <h3 className="font-semibold text-slate-900 mb-6">Daily Cost Trend (USD)</h3>
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+          <h3 className="text-xl font-semibold text-slate-900 mb-6">Daily Cost Trend (USD)</h3>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={usageStats.chartData}>
@@ -230,7 +230,7 @@ export const AdminPanel: React.FC = () => {
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} prefix="$" />
                 <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
                 <Legend />
-                <Line type="monotone" dataKey="cost" stroke="#10b981" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} name="Cost ($)" />
+                <Line type="monotone" dataKey="cost" stroke="#007567" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} name="Cost ($)" />
               </LineChart>
             </ResponsiveContainer>
           </div>

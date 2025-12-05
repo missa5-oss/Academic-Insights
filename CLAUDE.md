@@ -129,14 +129,70 @@ PORT=3001
 Get your Neon connection string from [Neon Console](https://console.neon.tech)
 
 ### Running the App
+
+> **Last updated:** December 5, 2025
+
+#### Quick Start (Recommended)
 ```bash
-# Terminal 1: Start backend API
+# Terminal 1: Start backend API (must start first)
 npm run server
 
 # Terminal 2: Start frontend
 npm run dev
+```
 
-# Other commands
+#### macOS Troubleshooting: IPv6 Binding Error
+
+If you see this error when starting the frontend:
+```
+Error: listen EPERM: operation not permitted ::1:5173
+```
+
+This is a macOS security issue with IPv6 binding. Use this workaround:
+```bash
+# Instead of `npm run dev`, run Vite with explicit IPv4 host:
+npx vite --host 127.0.0.1
+```
+
+Then access the app at: **http://127.0.0.1:5173/**
+
+#### Verifying Servers Are Running
+
+**Backend verification:**
+```bash
+# Check if backend is listening on port 3001
+lsof -i :3001
+
+# Test the API directly
+curl http://localhost:3001/api/projects
+```
+
+You should see your projects returned as JSON.
+
+**Frontend verification:**
+- Open http://localhost:5173/ (or http://127.0.0.1:5173/ if using the IPv4 workaround)
+- You should see the login page
+
+#### CORS Configuration
+
+The backend allows requests from these origins by default:
+- `http://localhost:5173` (Vite default port)
+- `http://127.0.0.1:5173`
+- `http://localhost:3000`
+- `http://127.0.0.1:3000`
+
+If the frontend can't load data, check that:
+1. Backend is running (`lsof -i :3001`)
+2. Frontend URL matches one of the allowed CORS origins
+3. Browser console shows no CORS errors
+
+To add custom origins, set `ALLOWED_ORIGINS` in `server/.env`:
+```
+ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://your-domain.com
+```
+
+#### Other Commands
+```bash
 npm run build        # Production build
 npm run preview      # Preview production build
 ```
@@ -252,7 +308,7 @@ The app uses three distinct Gemini API features (all proxied through backend for
 - `GEMINI_API_KEY`: Google Gemini API key (kept secure on server-side only)
 - `DATABASE_URL`: Neon PostgreSQL connection string
 - `PORT`: Server port (default: 3001)
-- `ALLOWED_ORIGINS`: (Optional) Comma-separated list of allowed CORS origins for production (default: `http://localhost:3000,http://127.0.0.1:3000`)
+- `ALLOWED_ORIGINS`: (Optional) Comma-separated list of allowed CORS origins for production (default: `http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000`)
 
 ### Important Implementation Details
 
@@ -288,11 +344,21 @@ The app uses three distinct Gemini API features (all proxied through backend for
 **Common debugging points**:
 - Check browser console for API fetch failures
 - Verify `GEMINI_API_KEY` is set correctly in `server/.env` (backend only)
-- Ensure backend server is running on port 3001
+- Ensure backend server is running on port 3001 (`lsof -i :3001`)
 - Check server console for Gemini API errors and database connection errors
 - Verify `DATABASE_URL` is correct in `server/.env`
 - Review grounding metadata in backend API responses for source validation
 - Use browser DevTools Network tab to inspect API calls to `/api/gemini/*`
+
+**Common Issues & Solutions**:
+
+| Issue | Symptom | Solution |
+|-------|---------|----------|
+| CORS Error | "No 'Access-Control-Allow-Origin' header" in console | Ensure frontend URL (including port) is in `ALLOWED_ORIGINS` or default list |
+| IPv6 Binding Error | `Error: listen EPERM: operation not permitted ::1:5173` | Run `npx vite --host 127.0.0.1` instead of `npm run dev` |
+| Projects Not Loading | Dashboard shows empty, no errors | Check backend is running, test API with `curl http://localhost:3001/api/projects` |
+| Database Connection Hang | Backend starts but never shows "Running on..." | Verify `DATABASE_URL` in `server/.env`, check Neon dashboard for connection issues |
+| API Key Error | 401/403 errors on extraction | Verify `GEMINI_API_KEY` in `server/.env` is valid |
 
 ### Path Aliasing
 
