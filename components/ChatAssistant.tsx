@@ -1,9 +1,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Bot, Send, X, Minimize2, Maximize2, Loader2, Sparkles } from 'lucide-react';
-import { GenerateContentResponse, Chat } from "@google/genai";
 import ReactMarkdown from 'react-markdown';
-import { createProjectChat } from '../services/geminiService';
+import { createProjectChat, BackendChat } from '../services/geminiService';
 import { ExtractionResult } from '../types';
 
 interface ChatAssistantProps {
@@ -23,15 +22,25 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ data, isOpen, onTo
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [chatSession, setChatSession] = useState<Chat | null>(null);
-  
+  const [chatSession, setChatSession] = useState<BackendChat | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize chat when data changes or component mounts
+  // Initialize or update chat when data changes (e.g., switching projects)
   useEffect(() => {
     if (data.length > 0) {
-      const session = createProjectChat(data);
-      setChatSession(session);
+      if (chatSession) {
+        // Update existing session with new project context
+        chatSession.updateContext(data);
+        // Reset conversation UI for new project
+        setMessages([
+          { role: 'model', text: 'Hi! I can analyze the extracted tuition data for this project. Ask me to compare prices or find insights.' }
+        ]);
+      } else {
+        // Create new session on first mount
+        const session = createProjectChat(data);
+        setChatSession(session);
+      }
     }
   }, [data]);
 

@@ -52,7 +52,9 @@ export async function initializeDatabase() {
         validated_sources JSONB NOT NULL DEFAULT '[]'::jsonb,
         extraction_date TEXT NOT NULL,
         raw_content TEXT NOT NULL,
-        is_flagged BOOLEAN DEFAULT FALSE
+        is_flagged BOOLEAN DEFAULT FALSE,
+        extraction_version INTEGER DEFAULT 1,
+        extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
 
@@ -72,6 +74,50 @@ export async function initializeDatabase() {
     } catch (error) {
       // Column might already exist, ignore error
       console.log('ℹ️  Migration: is_flagged column already exists or migration failed');
+    }
+
+    // Add historical tracking columns if they don't exist (migration)
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS extraction_version INTEGER DEFAULT 1
+      `;
+      console.log('✅ Migration: extraction_version column added');
+    } catch (error) {
+      console.log('ℹ️  Migration: extraction_version column already exists');
+    }
+
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      `;
+      console.log('✅ Migration: extracted_at column added');
+    } catch (error) {
+      console.log('ℹ️  Migration: extracted_at column already exists');
+    }
+
+    // Backfill extracted_at for existing records (use extraction_date as fallback)
+    try {
+      await sql`
+        UPDATE extraction_results
+        SET extracted_at = TO_TIMESTAMP(extraction_date, 'YYYY-MM-DD HH24:MI')
+        WHERE extracted_at IS NULL AND extraction_date IS NOT NULL
+      `;
+      console.log('✅ Migration: Backfilled extracted_at from extraction_date');
+    } catch (error) {
+      console.log('ℹ️  Migration: extracted_at backfill skipped or failed');
+    }
+
+    // Create index for historical queries (version + time-based lookups)
+    try {
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_results_history
+        ON extraction_results(project_id, school_name, program_name, extraction_version)
+      `;
+      console.log('✅ Index: idx_results_history created');
+    } catch (error) {
+      console.log('ℹ️  Index: idx_results_history already exists');
     }
 
     console.log('✅ Database schema initialized successfully');

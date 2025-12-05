@@ -60,6 +60,10 @@ export interface ExtractionResult {
 
   // Manual flagging for errors
   is_flagged?: boolean;
+
+  // Historical tracking
+  extraction_version: number; // Version number for tracking price changes over time
+  extracted_at: string; // ISO timestamp of when this version was extracted
 }
 
 export interface Project {

@@ -15,6 +15,9 @@ interface AppContextType {
   updateResult: (id: string, updates: Partial<ExtractionResult>) => void;
   deleteResult: (id: string, projectId: string) => void;
   restoreData: (data: { projects: Project[]; results: ExtractionResult[] }) => void;
+  getResultHistory: (id: string) => Promise<ExtractionResult[]>;
+  createNewVersion: (id: string, newData: Partial<ExtractionResult>) => Promise<void>;
+  getTrendsData: (projectId: string) => Promise<any[]>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -293,8 +296,85 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  // Get version history for a specific result
+  const getResultHistory = async (id: string): Promise<ExtractionResult[]> => {
+    try {
+      const response = await fetch(`${API_URL}/api/results/${id}/history`);
+      if (response.ok) {
+        return await response.json();
+      }
+      return [];
+    } catch (error) {
+      console.error('Failed to fetch result history:', error);
+      return [];
+    }
+  };
+
+  // Create a new version of a result (for price tracking)
+  const createNewVersion = async (id: string, newData: Partial<ExtractionResult>): Promise<void> => {
+    try {
+      const newId = `r-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+      const response = await fetch(`${API_URL}/api/results/${id}/new-version`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newId,
+          ...newData
+        })
+      });
+
+      if (response.ok) {
+        const newVersion = await response.json();
+        // Add new version to results
+        setResults(prev => [...prev, newVersion]);
+
+        // Update project count if needed
+        if (newVersion.project_id) {
+          const projectResponse = await fetch(`${API_URL}/api/projects/${newVersion.project_id}`);
+          if (projectResponse.ok) {
+            const updatedProject = await projectResponse.json();
+            setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to create new version:', error);
+    }
+  };
+
+  // Get trends data for line chart
+  const getTrendsData = async (projectId: string): Promise<any[]> => {
+    try {
+      const response = await fetch(`${API_URL}/api/results/trends/${projectId}`);
+      if (response.ok) {
+        return await response.json();
+      }
+      return [];
+    } catch (error) {
+      console.error('Failed to fetch trends data:', error);
+      return [];
+    }
+  };
+
   return (
-    <AppContext.Provider value={{ user, login, logout, projects, results, addProject, editProject, deleteProject, addTargets, updateResult, deleteResult, restoreData }}>
+    <AppContext.Provider value={{
+      user,
+      login,
+      logout,
+      projects,
+      results,
+      addProject,
+      editProject,
+      deleteProject,
+      addTargets,
+      updateResult,
+      deleteResult,
+      restoreData,
+      getResultHistory,
+      createNewVersion,
+      getTrendsData
+    }}>
       {children}
     </AppContext.Provider>
   );

@@ -205,4 +205,124 @@ router.post('/bulk-delete', async (req, res) => {
   }
 });
 
+// GET version history for a specific result (all versions of same school/program)
+router.get('/:id/history', async (req, res) => {
+  try {
+    const [current] = await sql`SELECT * FROM extraction_results WHERE id = ${req.params.id}`;
+
+    if (!current) {
+      return res.status(404).json({ error: 'Result not found' });
+    }
+
+    // Get all versions for this school/program in this project
+    const history = await sql`
+      SELECT * FROM extraction_results
+      WHERE project_id = ${current.project_id}
+        AND school_name = ${current.school_name}
+        AND program_name = ${current.program_name}
+      ORDER BY extraction_version DESC
+    `;
+
+    res.json(history);
+  } catch (error) {
+    console.error('Error fetching result history:', error);
+    res.status(500).json({ error: 'Failed to fetch result history' });
+  }
+});
+
+// GET historical trends data for line chart (all results with multiple versions)
+router.get('/trends/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    // Get all results for this project with their versions
+    const trends = await sql`
+      SELECT
+        school_name,
+        program_name,
+        tuition_amount,
+        extraction_version,
+        extracted_at,
+        academic_year
+      FROM extraction_results
+      WHERE project_id = ${projectId}
+        AND status = 'Success'
+        AND tuition_amount IS NOT NULL
+      ORDER BY school_name, program_name, extraction_version ASC
+    `;
+
+    res.json(trends);
+  } catch (error) {
+    console.error('Error fetching trends data:', error);
+    res.status(500).json({ error: 'Failed to fetch trends data' });
+  }
+});
+
+// POST create new version (track price update)
+// This creates a new version of an existing result for historical tracking
+router.post('/:id/new-version', async (req, res) => {
+  try {
+    const [current] = await sql`SELECT * FROM extraction_results WHERE id = ${req.params.id}`;
+
+    if (!current) {
+      return res.status(404).json({ error: 'Result not found' });
+    }
+
+    const {
+      id: newId,
+      tuition_amount,
+      tuition_period,
+      academic_year,
+      cost_per_credit,
+      total_credits,
+      program_length,
+      remarks,
+      location_data,
+      confidence_score,
+      status,
+      source_url,
+      validated_sources,
+      extraction_date,
+      raw_content
+    } = req.body;
+
+    // Create new version with incremented version number
+    const [newVersion] = await sql`
+      INSERT INTO extraction_results (
+        id, project_id, school_name, program_name, tuition_amount, tuition_period,
+        academic_year, cost_per_credit, total_credits, program_length, remarks,
+        location_data, confidence_score, status, source_url, validated_sources,
+        extraction_date, raw_content, extraction_version, extracted_at
+      ) VALUES (
+        ${newId},
+        ${current.project_id},
+        ${current.school_name},
+        ${current.program_name},
+        ${tuition_amount},
+        ${tuition_period},
+        ${academic_year},
+        ${cost_per_credit},
+        ${total_credits},
+        ${program_length},
+        ${remarks},
+        ${location_data ? JSON.stringify(location_data) : null},
+        ${confidence_score},
+        ${status},
+        ${source_url},
+        ${validated_sources ? JSON.stringify(validated_sources) : '[]'},
+        ${extraction_date},
+        ${raw_content},
+        ${current.extraction_version + 1},
+        CURRENT_TIMESTAMP
+      )
+      RETURNING *
+    `;
+
+    res.json(newVersion);
+  } catch (error) {
+    console.error('Error creating new version:', error);
+    res.status(500).json({ error: 'Failed to create new version' });
+  }
+});
+
 export default router;

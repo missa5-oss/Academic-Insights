@@ -4,9 +4,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { ExtractionResult, ConfidenceScore, ExtractionStatus } from '../types';
 import { AuditModal } from '../components/AuditModal';
+import { HistoryModal } from '../components/HistoryModal';
 import { AddTargetModal, EditProjectModal } from '../components/ProjectModals';
 import { generateExecutiveSummary, simulateExtraction, getCampusLocation } from '../services/geminiService';
-import { Search, RefreshCw, Bot, AlertTriangle, CheckCircle, ExternalLink, Eye, Download, Plus, Play, Clock, BarChart3, Table as TableIcon, Trash2, Pencil, MapPin, XCircle, Flag, Check, X } from 'lucide-react';
+import { Search, RefreshCw, Bot, AlertTriangle, CheckCircle, ExternalLink, Eye, Download, Plus, Play, Clock, BarChart3, Table as TableIcon, Trash2, Pencil, Flag, Check, X, History } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart as RePieChart, Pie, Legend, LineChart, Line } from 'recharts';
 import { ChatAssistant } from '../components/ChatAssistant';
@@ -14,15 +15,17 @@ import { ChatAssistant } from '../components/ChatAssistant';
 export const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { projects, results, addTargets, updateResult, deleteResult, editProject, deleteProject, user } = useApp();
-  
+  const { projects, results, addTargets, updateResult, deleteResult, editProject, deleteProject, user, createNewVersion } = useApp();
+
   const project = projects.find(p => p.id === id);
   const projectResults = results.filter(r => r.project_id === id);
-  
+
   const [viewMode, setViewMode] = useState<'table' | 'analysis'>('table');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedResult, setSelectedResult] = useState<ExtractionResult | null>(null);
   const [isAuditOpen, setIsAuditOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [historyResultId, setHistoryResultId] = useState<string | null>(null);
   const [isAddTargetOpen, setIsAddTargetOpen] = useState(false);
   const [isEditProjectOpen, setIsEditProjectOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -285,6 +288,40 @@ export const ProjectDetail: React.FC = () => {
     updateResult(result.id, { is_flagged: !result.is_flagged });
   };
 
+  const handleOpenHistory = (resultId: string) => {
+    setHistoryResultId(resultId);
+    setIsHistoryOpen(true);
+  };
+
+  const handleTrackPriceUpdate = async (resultId: string) => {
+    const result = projectResults.find(r => r.id === resultId);
+    if (!result) return;
+
+    setProcessingItems(prev => ({ ...prev, [resultId]: true }));
+
+    try {
+      // Run new extraction
+      const extractedData = await simulateExtraction(result.school_name, result.program_name);
+
+      // Get location if not already present
+      let locationData = extractedData.location_data || result.location_data;
+      if (!locationData) {
+        locationData = await getCampusLocation(result.school_name, result.program_name);
+      }
+
+      // Create new version with extracted data
+      await createNewVersion(resultId, {
+        ...extractedData,
+        location_data: locationData,
+        extraction_date: new Date().toISOString().split('T')[0]
+      });
+    } catch (error) {
+      console.error('Error tracking price update:', error);
+    } finally {
+      setProcessingItems(prev => ({ ...prev, [resultId]: false }));
+    }
+  };
+
   if (!project) return <div className="p-8">Project not found</div>;
 
   return (
@@ -465,8 +502,17 @@ export const ProjectDetail: React.FC = () => {
                         />
                     </td>
                     <td className="px-6 py-4">
-                      <div className="font-medium text-slate-900">{result.school_name}</div>
-                      <div className="text-xs text-slate-500 mt-0.5">{result.program_name}</div>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <div className="font-medium text-slate-900">{result.school_name}</div>
+                          <div className="text-xs text-slate-500 mt-0.5">{result.program_name}</div>
+                        </div>
+                        {result.extraction_version > 1 && (
+                          <span className="px-2 py-0.5 bg-brand-100 text-brand-700 text-xs font-semibold rounded">
+                            v{result.extraction_version}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       {editingTuitionId === result.id ? (
@@ -579,6 +625,13 @@ export const ProjectDetail: React.FC = () => {
                         ) : (
                             <>
                                <button
+                                  onClick={() => handleOpenHistory(result.id)}
+                                  className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium bg-brand-100 text-brand-700 hover:bg-brand-200 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                                  title="View Price History"
+                               >
+                                  <History size={14}/>
+                               </button>
+                               <button
                                   onClick={() => handleRunExtraction(result)}
                                   disabled={processingItems[result.id] || isBatchProcessing}
                                   className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-md transition-colors opacity-0 group-hover:opacity-100"
@@ -586,16 +639,16 @@ export const ProjectDetail: React.FC = () => {
                                >
                                   <RefreshCw className={processingItems[result.id] ? "animate-spin" : ""} size={14}/>
                                </button>
-                              <a 
-                                  href={result.source_url} 
-                                  target="_blank" 
+                              <a
+                                  href={result.source_url}
+                                  target="_blank"
                                   rel="noreferrer"
                                   className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
                                   title="Open Source URL"
                               >
                                   <ExternalLink size={16} />
                               </a>
-                              <button 
+                              <button
                                   onClick={() => handleAudit(result)}
                                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors opacity-0 group-hover:opacity-100"
                               >
@@ -752,12 +805,25 @@ export const ProjectDetail: React.FC = () => {
         initialDescription={project.description}
         onSubmit={handleEditProject}
       />
-      
+
+      {/* History Modal */}
+      {historyResultId && (
+        <HistoryModal
+          isOpen={isHistoryOpen}
+          onClose={() => {
+            setIsHistoryOpen(false);
+            setHistoryResultId(null);
+          }}
+          resultId={historyResultId}
+          onTrackUpdate={() => handleTrackPriceUpdate(historyResultId)}
+        />
+      )}
+
       {/* Floating Chat Assistant */}
-      <ChatAssistant 
-        isOpen={isChatOpen} 
-        onToggle={() => setIsChatOpen(!isChatOpen)} 
-        data={projectResults.filter(r => r.status === ExtractionStatus.SUCCESS)} 
+      <ChatAssistant
+        isOpen={isChatOpen}
+        onToggle={() => setIsChatOpen(!isChatOpen)}
+        data={projectResults.filter(r => r.status === ExtractionStatus.SUCCESS)}
       />
     </div>
   );
