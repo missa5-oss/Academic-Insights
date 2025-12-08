@@ -170,7 +170,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         cost_per_credit: null,
         total_credits: null,
         program_length: null,
-        remarks: null
+        remarks: null,
+        actual_program_name: null,
+        user_comments: null,
+        is_stem: null
       };
     });
 

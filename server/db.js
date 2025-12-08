@@ -120,6 +120,39 @@ export async function initializeDatabase() {
       console.log('ℹ️  Index: idx_results_history already exists');
     }
 
+    // Add actual_program_name column if it doesn't exist (migration)
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS actual_program_name TEXT DEFAULT NULL
+      `;
+      console.log('✅ Migration: actual_program_name column added');
+    } catch (error) {
+      console.log('ℹ️  Migration: actual_program_name column already exists');
+    }
+
+    // Add user_comments column if it doesn't exist (migration)
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS user_comments TEXT DEFAULT NULL
+      `;
+      console.log('✅ Migration: user_comments column added');
+    } catch (error) {
+      console.log('ℹ️  Migration: user_comments column already exists');
+    }
+
+    // Add is_stem column if it doesn't exist (migration)
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS is_stem BOOLEAN DEFAULT NULL
+      `;
+      console.log('✅ Migration: is_stem column added');
+    } catch (error) {
+      console.log('ℹ️  Migration: is_stem column already exists');
+    }
+
     console.log('✅ Database schema initialized successfully');
   } catch (error) {
     console.error('❌ Database initialization error:', error);
