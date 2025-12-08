@@ -1,27 +1,110 @@
 import express from 'express';
 import { sql } from '../db.js';
+import { validateResult, validateBulkResults, validateBulkDelete } from '../middleware/validation.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 
-// GET all results (optionally filter by project_id)
+// GET all results (optionally filter by project_id, with pagination)
 router.get('/', async (req, res) => {
   try {
-    const { project_id } = req.query;
+    const { project_id, page, limit, status, confidence } = req.query;
+
+    // Pagination defaults
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 100));
+    const offset = (pageNum - 1) * limitNum;
 
     let results;
+    let totalCount;
+
     if (project_id) {
+      // Build dynamic query based on filters
+      if (status && confidence) {
+        results = await sql`
+          SELECT * FROM extraction_results
+          WHERE project_id = ${project_id}
+            AND status = ${status}
+            AND confidence_score = ${confidence}
+          ORDER BY extraction_date DESC
+          LIMIT ${limitNum} OFFSET ${offset}
+        `;
+        const [countResult] = await sql`
+          SELECT COUNT(*) as count FROM extraction_results
+          WHERE project_id = ${project_id}
+            AND status = ${status}
+            AND confidence_score = ${confidence}
+        `;
+        totalCount = parseInt(countResult.count);
+      } else if (status) {
+        results = await sql`
+          SELECT * FROM extraction_results
+          WHERE project_id = ${project_id}
+            AND status = ${status}
+          ORDER BY extraction_date DESC
+          LIMIT ${limitNum} OFFSET ${offset}
+        `;
+        const [countResult] = await sql`
+          SELECT COUNT(*) as count FROM extraction_results
+          WHERE project_id = ${project_id}
+            AND status = ${status}
+        `;
+        totalCount = parseInt(countResult.count);
+      } else if (confidence) {
+        results = await sql`
+          SELECT * FROM extraction_results
+          WHERE project_id = ${project_id}
+            AND confidence_score = ${confidence}
+          ORDER BY extraction_date DESC
+          LIMIT ${limitNum} OFFSET ${offset}
+        `;
+        const [countResult] = await sql`
+          SELECT COUNT(*) as count FROM extraction_results
+          WHERE project_id = ${project_id}
+            AND confidence_score = ${confidence}
+        `;
+        totalCount = parseInt(countResult.count);
+      } else {
+        results = await sql`
+          SELECT * FROM extraction_results
+          WHERE project_id = ${project_id}
+          ORDER BY extraction_date DESC
+          LIMIT ${limitNum} OFFSET ${offset}
+        `;
+        const [countResult] = await sql`
+          SELECT COUNT(*) as count FROM extraction_results
+          WHERE project_id = ${project_id}
+        `;
+        totalCount = parseInt(countResult.count);
+      }
+    } else {
       results = await sql`
         SELECT * FROM extraction_results
-        WHERE project_id = ${project_id}
         ORDER BY extraction_date DESC
+        LIMIT ${limitNum} OFFSET ${offset}
       `;
-    } else {
-      results = await sql`SELECT * FROM extraction_results ORDER BY extraction_date DESC`;
+      const [countResult] = await sql`SELECT COUNT(*) as count FROM extraction_results`;
+      totalCount = parseInt(countResult.count);
     }
 
-    res.json(results);
+    // Return with pagination metadata if page/limit was requested
+    if (page || limit) {
+      res.json({
+        data: results,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total: totalCount,
+          totalPages: Math.ceil(totalCount / limitNum),
+          hasMore: offset + results.length < totalCount
+        }
+      });
+    } else {
+      // Backward compatible: return just the array
+      res.json(results);
+    }
   } catch (error) {
-    console.error('Error fetching results:', error);
+    logger.error('Error fetching results', error);
     res.status(500).json({ error: 'Failed to fetch results' });
   }
 });
@@ -35,13 +118,13 @@ router.get('/:id', async (req, res) => {
     }
     res.json(result);
   } catch (error) {
-    console.error('Error fetching result:', error);
+    logger.error('Error fetching result', error);
     res.status(500).json({ error: 'Failed to fetch result' });
   }
 });
 
 // POST create result
-router.post('/', async (req, res) => {
+router.post('/', validateResult, async (req, res) => {
   try {
     const {
       id, project_id, school_name, program_name, tuition_amount,
@@ -68,19 +151,15 @@ router.post('/', async (req, res) => {
 
     res.status(201).json(result);
   } catch (error) {
-    console.error('Error creating result:', error);
+    logger.error('Error creating result', error);
     res.status(500).json({ error: 'Failed to create result' });
   }
 });
 
 // POST bulk create results
-router.post('/bulk', async (req, res) => {
+router.post('/bulk', validateBulkResults, async (req, res) => {
   try {
     const { results } = req.body;
-
-    if (!Array.isArray(results) || results.length === 0) {
-      return res.status(400).json({ error: 'Results array is required' });
-    }
 
     const created = [];
     for (const result of results) {
@@ -112,7 +191,7 @@ router.post('/bulk', async (req, res) => {
 
     res.status(201).json(created);
   } catch (error) {
-    console.error('Error bulk creating results:', error);
+    logger.error('Error bulk creating results', error);
     res.status(500).json({ error: 'Failed to bulk create results' });
   }
 });
@@ -155,7 +234,7 @@ router.put('/:id', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error updating result:', error);
+    logger.error('Error updating result', error);
     res.status(500).json({ error: 'Failed to update result' });
   }
 });
@@ -175,19 +254,15 @@ router.delete('/:id', async (req, res) => {
 
     res.json({ message: 'Result deleted successfully', id: deleted.id, project_id: deleted.project_id });
   } catch (error) {
-    console.error('Error deleting result:', error);
+    logger.error('Error deleting result', error);
     res.status(500).json({ error: 'Failed to delete result' });
   }
 });
 
 // DELETE bulk results
-router.post('/bulk-delete', async (req, res) => {
+router.post('/bulk-delete', validateBulkDelete, async (req, res) => {
   try {
     const { ids } = req.body;
-
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: 'IDs array is required' });
-    }
 
     const deleted = await sql`
       DELETE FROM extraction_results
@@ -200,7 +275,7 @@ router.post('/bulk-delete', async (req, res) => {
       deleted
     });
   } catch (error) {
-    console.error('Error bulk deleting results:', error);
+    logger.error('Error bulk deleting results', error);
     res.status(500).json({ error: 'Failed to bulk delete results' });
   }
 });
@@ -225,7 +300,7 @@ router.get('/:id/history', async (req, res) => {
 
     res.json(history);
   } catch (error) {
-    console.error('Error fetching result history:', error);
+    logger.error('Error fetching result history', error);
     res.status(500).json({ error: 'Failed to fetch result history' });
   }
 });
@@ -253,7 +328,7 @@ router.get('/trends/:projectId', async (req, res) => {
 
     res.json(trends);
   } catch (error) {
-    console.error('Error fetching trends data:', error);
+    logger.error('Error fetching trends data', error);
     res.status(500).json({ error: 'Failed to fetch trends data' });
   }
 });
@@ -320,7 +395,7 @@ router.post('/:id/new-version', async (req, res) => {
 
     res.json(newVersion);
   } catch (error) {
-    console.error('Error creating new version:', error);
+    logger.error('Error creating new version', error);
     res.status(500).json({ error: 'Failed to create new version' });
   }
 });

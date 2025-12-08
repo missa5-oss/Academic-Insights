@@ -61,15 +61,14 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ data, isOpen, onTo
     setIsLoading(true);
 
     try {
-      const result = await chatSession.sendMessageStream({ message: userMsg });
-      
+      const result = chatSession.sendMessageStream(userMsg);
+
       let fullText = '';
       setMessages(prev => [...prev, { role: 'model', text: '' }]);
 
       for await (const chunk of result) {
-        const c = chunk as GenerateContentResponse;
-        if (c.text) {
-            fullText += c.text;
+        if (chunk.text) {
+            fullText += chunk.text;
             setMessages(prev => {
                 const newHistory = [...prev];
                 newHistory[newHistory.length - 1].text = fullText;

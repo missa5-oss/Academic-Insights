@@ -2,6 +2,10 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Project, ExtractionResult, ExtractionStatus, ConfidenceScore, User } from '../types';
 
+/**
+ * Type definition for the App context value.
+ * Provides authentication, project management, and result operations.
+ */
 interface AppContextType {
   user: User | null;
   login: (email: string, role: 'Admin' | 'Analyst') => void;
@@ -22,12 +26,25 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+/** Storage keys for localStorage persistence */
 const STORAGE_KEYS = {
   USER: 'academica_user_v1'
 };
 
+/** Backend API URL from environment or default to localhost */
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+/**
+ * Global state provider for the application.
+ * Manages authentication, projects, and extraction results with API persistence.
+ *
+ * @example
+ * ```tsx
+ * <AppProvider>
+ *   <App />
+ * </AppProvider>
+ * ```
+ */
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // --- Authentication State ---
   const [user, setUser] = useState<User | null>(() => {
@@ -39,15 +56,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   });
 
+  /**
+   * Authenticates a user and persists to localStorage.
+   * @param email - User's email address
+   * @param role - User role ('Admin' or 'Analyst')
+   */
   const login = (email: string, role: 'Admin' | 'Analyst') => {
     const name = role === 'Admin' ? 'Alex Administrator' : 'Diana Analyst';
     const initials = role === 'Admin' ? 'AA' : 'DA';
-    
+
     const newUser: User = { name, email, role, initials };
     setUser(newUser);
     localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(newUser));
   };
 
+  /** Logs out the current user and clears localStorage. */
   const logout = () => {
     setUser(null);
     localStorage.removeItem(STORAGE_KEYS.USER);
@@ -84,6 +107,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     fetchData();
   }, []);
 
+  /**
+   * Creates a new project and persists to the database.
+   * @param name - Project name
+   * @param description - Project description
+   */
   const addProject = async (name: string, description: string) => {
     const newProject: Project = {
       id: `p-${Date.now()}`,
@@ -111,6 +139,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  /**
+   * Updates an existing project's name and description.
+   * @param id - Project ID to update
+   * @param name - New project name
+   * @param description - New project description
+   */
   const editProject = async (id: string, name: string, description: string) => {
     try {
       const response = await fetch(`${API_URL}/api/projects/${id}`, {
@@ -128,6 +162,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  /**
+   * Deletes a project and all associated results (cascade).
+   * @param id - Project ID to delete
+   */
   const deleteProject = async (id: string) => {
     try {
       const response = await fetch(`${API_URL}/api/projects/${id}`, {
@@ -145,7 +183,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  // Consolidated function to handle both single and bulk additions
+  /**
+   * Adds extraction targets (school/program combinations) to a project.
+   * Handles both single and bulk additions with unique ID generation.
+   * @param projectId - Project ID to add targets to
+   * @param targets - Array of school/program pairs to add
+   */
   const addTargets = async (projectId: string, targets: { schoolName: string; programName: string }[]) => {
     const timestamp = Date.now();
 
@@ -170,7 +213,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         cost_per_credit: null,
         total_credits: null,
         program_length: null,
-        remarks: null
+        remarks: null,
+        extraction_version: 1,
+        extracted_at: new Date().toISOString()
       };
     });
 
@@ -201,6 +246,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  /**
+   * Updates an extraction result with new data.
+   * Automatically updates project's last_run timestamp on successful extraction.
+   * @param id - Result ID to update
+   * @param updates - Partial result data to merge
+   */
   const updateResult = async (id: string, updates: Partial<ExtractionResult>) => {
     try {
       const response = await fetch(`${API_URL}/api/results/${id}`, {
@@ -236,6 +287,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  /**
+   * Deletes an extraction result and updates the project's result count.
+   * @param id - Result ID to delete
+   * @param projectId - Parent project ID (for count update)
+   */
   const deleteResult = async (id: string, projectId: string) => {
     try {
       const response = await fetch(`${API_URL}/api/results/${id}`, {
@@ -262,6 +318,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  /**
+   * Restores application data from a backup.
+   * Clears existing data and imports projects and results.
+   * @param data - Backup data containing projects and results arrays
+   */
   const restoreData = async (data: { projects: Project[]; results: ExtractionResult[] }) => {
     try {
       // Clear existing data first
@@ -296,7 +357,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  // Get version history for a specific result
+  /**
+   * Fetches version history for a specific result.
+   * Returns all versions of the same school/program combination.
+   * @param id - Result ID to get history for
+   * @returns Array of historical extraction results, ordered by version
+   */
   const getResultHistory = async (id: string): Promise<ExtractionResult[]> => {
     try {
       const response = await fetch(`${API_URL}/api/results/${id}/history`);
@@ -310,7 +376,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  // Create a new version of a result (for price tracking)
+  /**
+   * Creates a new version of a result for historical price tracking.
+   * Increments the extraction_version and stores as a new record.
+   * @param id - Original result ID to create new version from
+   * @param newData - New extraction data for this version
+   */
   const createNewVersion = async (id: string, newData: Partial<ExtractionResult>): Promise<void> => {
     try {
       const newId = `r-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -343,7 +414,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  // Get trends data for line chart
+  /**
+   * Fetches trends data for visualizing price changes over time.
+   * Used for line chart visualization of tuition trends.
+   * @param projectId - Project ID to get trends for
+   * @returns Array of trend data points for charting
+   */
   const getTrendsData = async (projectId: string): Promise<any[]> => {
     try {
       const response = await fetch(`${API_URL}/api/results/trends/${projectId}`);
@@ -380,6 +456,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 };
 
+/**
+ * Hook to access the App context.
+ * Must be used within an AppProvider.
+ * @returns The App context value with all state and methods
+ * @throws Error if used outside of AppProvider
+ *
+ * @example
+ * ```tsx
+ * const { user, projects, addProject } = useApp();
+ * ```
+ */
 export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) {

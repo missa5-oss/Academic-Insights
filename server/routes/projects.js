@@ -1,5 +1,7 @@
 import express from 'express';
 import { sql } from '../db.js';
+import { validateProject } from '../middleware/validation.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -9,7 +11,7 @@ router.get('/', async (req, res) => {
     const projects = await sql`SELECT * FROM projects ORDER BY created_at DESC`;
     res.json(projects);
   } catch (error) {
-    console.error('Error fetching projects:', error);
+    logger.error('Error fetching projects', error);
     res.status(500).json({ error: 'Failed to fetch projects' });
   }
 });
@@ -23,13 +25,13 @@ router.get('/:id', async (req, res) => {
     }
     res.json(project);
   } catch (error) {
-    console.error('Error fetching project:', error);
+    logger.error('Error fetching project', error);
     res.status(500).json({ error: 'Failed to fetch project' });
   }
 });
 
 // POST create project
-router.post('/', async (req, res) => {
+router.post('/', validateProject, async (req, res) => {
   try {
     const { id, name, description, created_at, last_run, status, results_count } = req.body;
 
@@ -41,13 +43,13 @@ router.post('/', async (req, res) => {
 
     res.status(201).json(project);
   } catch (error) {
-    console.error('Error creating project:', error);
+    logger.error('Error creating project', error);
     res.status(500).json({ error: 'Failed to create project' });
   }
 });
 
 // PUT update project
-router.put('/:id', async (req, res) => {
+router.put('/:id', validateProject, async (req, res) => {
   try {
     const { name, description, last_run, status, results_count } = req.body;
 
@@ -69,7 +71,7 @@ router.put('/:id', async (req, res) => {
 
     res.json(project);
   } catch (error) {
-    console.error('Error updating project:', error);
+    logger.error('Error updating project', error);
     res.status(500).json({ error: 'Failed to update project' });
   }
 });
@@ -89,7 +91,7 @@ router.delete('/:id', async (req, res) => {
 
     res.json({ message: 'Project deleted successfully', id: deleted.id });
   } catch (error) {
-    console.error('Error deleting project:', error);
+    logger.error('Error deleting project', error);
     res.status(500).json({ error: 'Failed to delete project' });
   }
 });

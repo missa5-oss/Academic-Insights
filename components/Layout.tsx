@@ -4,6 +4,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, FolderOpen, Settings, LogOut, ShieldCheck, Plus, Lock } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { CreateProjectModal } from './ProjectModals';
+import { APP_VERSION } from '@/src/config';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -103,12 +104,16 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               <p className="text-sm font-medium truncate">{user?.name || 'User'}</p>
               <p className="text-xs text-slate-400 truncate">{user?.role} Access</p>
             </div>
-            <LogOut 
-              size={16} 
-              className="text-slate-400 cursor-pointer hover:text-white" 
+            <button
               onClick={handleLogout}
+              className="text-slate-400 cursor-pointer hover:text-white"
               title="Logout"
-            />
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
+          <div className="mt-3 pt-3 border-t border-slate-700">
+            <p className="text-xs text-slate-500 text-center">v{APP_VERSION}</p>
           </div>
         </div>
       </aside>

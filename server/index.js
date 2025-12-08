@@ -1,22 +1,19 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import { initializeDatabase } from './db.js';
 import projectsRouter from './routes/projects.js';
 import resultsRouter from './routes/results.js';
 import geminiRouter from './routes/gemini.js';
-
-dotenv.config();
+import { APP_VERSION, PORT as SERVER_PORT, getCorsOrigins, RATE_LIMITS } from './config.js';
+import logger from './utils/logger.js';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = SERVER_PORT;
 
 // CORS configuration for internal network
 const corsOptions = {
-  origin: process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-    : ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: getCorsOrigins(),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -24,18 +21,18 @@ const corsOptions = {
 
 // Rate limiting for Gemini API endpoints (more restrictive due to cost)
 const geminiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many AI requests from this IP, please try again later.',
+  windowMs: RATE_LIMITS.GEMINI.windowMs,
+  max: RATE_LIMITS.GEMINI.max,
+  message: RATE_LIMITS.GEMINI.message,
   standardHeaders: true,
   legacyHeaders: false,
 });
 
 // General API rate limiting
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Limit each IP to 500 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
+  windowMs: RATE_LIMITS.GENERAL.windowMs,
+  max: RATE_LIMITS.GENERAL.max,
+  message: RATE_LIMITS.GENERAL.message,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -44,9 +41,15 @@ const apiLimiter = rateLimit({
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' })); // Increase limit for bulk operations
 
+// Add version header to all responses
+app.use((req, res, next) => {
+  res.setHeader('X-App-Version', APP_VERSION);
+  next();
+});
+
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Academic-Insights API is running' });
+  res.json({ status: 'ok', version: APP_VERSION, message: 'Academic-Insights API is running' });
 });
 
 // Routes with rate limiting
@@ -56,7 +59,7 @@ app.use('/api/gemini', geminiLimiter, geminiRouter); // Stricter limits for AI e
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
+  logger.error('Unhandled error', err);
   res.status(500).json({ error: 'Internal server error' });
 });
 
@@ -66,15 +69,10 @@ async function startServer() {
     await initializeDatabase();
 
     app.listen(PORT, () => {
-      console.log(`
-╔════════════════════════════════════════╗
-║   Academic-Insights API Server         ║
-║   Running on http://localhost:${PORT}   ║
-╚════════════════════════════════════════╝
-      `);
+      logger.info(`Academic-Insights API Server v${APP_VERSION} running on http://localhost:${PORT}`);
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    logger.error('Failed to start server', error);
     process.exit(1);
   }
 }

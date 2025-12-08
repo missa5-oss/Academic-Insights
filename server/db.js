@@ -8,6 +8,9 @@ const __dirname = dirname(__filename);
 
 dotenv.config({ path: join(__dirname, '.env') });
 
+// Note: Logger imported after dotenv so IS_PRODUCTION is properly set
+import logger from './utils/logger.js';
+
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL environment variable is not set');
 }
@@ -70,10 +73,10 @@ export async function initializeDatabase() {
         ALTER TABLE extraction_results
         ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT FALSE
       `;
-      console.log('✅ Migration: is_flagged column added');
+      logger.info('Migration: is_flagged column added');
     } catch (error) {
       // Column might already exist, ignore error
-      console.log('ℹ️  Migration: is_flagged column already exists or migration failed');
+      logger.debug('Migration: is_flagged column already exists or migration failed');
     }
 
     // Add historical tracking columns if they don't exist (migration)
@@ -82,9 +85,9 @@ export async function initializeDatabase() {
         ALTER TABLE extraction_results
         ADD COLUMN IF NOT EXISTS extraction_version INTEGER DEFAULT 1
       `;
-      console.log('✅ Migration: extraction_version column added');
+      logger.info('Migration: extraction_version column added');
     } catch (error) {
-      console.log('ℹ️  Migration: extraction_version column already exists');
+      logger.debug('Migration: extraction_version column already exists');
     }
 
     try {
@@ -92,9 +95,9 @@ export async function initializeDatabase() {
         ALTER TABLE extraction_results
         ADD COLUMN IF NOT EXISTS extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       `;
-      console.log('✅ Migration: extracted_at column added');
+      logger.info('Migration: extracted_at column added');
     } catch (error) {
-      console.log('ℹ️  Migration: extracted_at column already exists');
+      logger.debug('Migration: extracted_at column already exists');
     }
 
     // Backfill extracted_at for existing records (use extraction_date as fallback)
@@ -104,9 +107,9 @@ export async function initializeDatabase() {
         SET extracted_at = TO_TIMESTAMP(extraction_date, 'YYYY-MM-DD HH24:MI')
         WHERE extracted_at IS NULL AND extraction_date IS NOT NULL
       `;
-      console.log('✅ Migration: Backfilled extracted_at from extraction_date');
+      logger.info('Migration: Backfilled extracted_at from extraction_date');
     } catch (error) {
-      console.log('ℹ️  Migration: extracted_at backfill skipped or failed');
+      logger.debug('Migration: extracted_at backfill skipped or failed');
     }
 
     // Create index for historical queries (version + time-based lookups)
@@ -115,14 +118,58 @@ export async function initializeDatabase() {
         CREATE INDEX IF NOT EXISTS idx_results_history
         ON extraction_results(project_id, school_name, program_name, extraction_version)
       `;
-      console.log('✅ Index: idx_results_history created');
+      logger.info('Index: idx_results_history created');
     } catch (error) {
-      console.log('ℹ️  Index: idx_results_history already exists');
+      logger.debug('Index: idx_results_history already exists');
     }
 
-    console.log('✅ Database schema initialized successfully');
+    // Add unique constraint for result versioning (prevents duplicate versions)
+    try {
+      await sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_results_unique_version
+        ON extraction_results(project_id, school_name, program_name, extraction_version)
+      `;
+      logger.info('Constraint: unique version index created');
+    } catch (error) {
+      logger.debug('Constraint: unique version index already exists or failed');
+    }
+
+    // Create index for status filtering (common query pattern)
+    try {
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_results_status
+        ON extraction_results(project_id, status)
+      `;
+      logger.info('Index: idx_results_status created');
+    } catch (error) {
+      logger.debug('Index: idx_results_status already exists');
+    }
+
+    // Create index for confidence filtering
+    try {
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_results_confidence
+        ON extraction_results(project_id, confidence_score)
+      `;
+      logger.info('Index: idx_results_confidence created');
+    } catch (error) {
+      logger.debug('Index: idx_results_confidence already exists');
+    }
+
+    // Create index for extraction_date sorting (frequently used ORDER BY)
+    try {
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_results_extraction_date
+        ON extraction_results(project_id, extraction_date DESC)
+      `;
+      logger.info('Index: idx_results_extraction_date created');
+    } catch (error) {
+      logger.debug('Index: idx_results_extraction_date already exists');
+    }
+
+    logger.info('Database schema initialized successfully');
   } catch (error) {
-    console.error('❌ Database initialization error:', error);
+    logger.error('Database initialization error', error);
     throw error;
   }
 }

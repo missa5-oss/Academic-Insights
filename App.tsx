@@ -6,6 +6,7 @@ import { ProjectDetail } from './pages/ProjectDetail';
 import { AdminPanel } from './pages/AdminPanel';
 import { Login } from './pages/Login';
 import { AppProvider, useApp } from './context/AppContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 interface RouteWrapperProps {
   children: React.ReactNode;
@@ -36,7 +37,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      
+
       {/* Protected Routes wrapped in Layout */}
       <Route
         path="/*"
@@ -44,15 +45,31 @@ function AppRoutes() {
           <ProtectedRoute>
             <Layout>
               <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/project/:id" element={<ProjectDetail />} />
-                <Route 
-                  path="/admin" 
+                <Route
+                  path="/"
+                  element={
+                    <ErrorBoundary boundaryName="Dashboard">
+                      <Dashboard />
+                    </ErrorBoundary>
+                  }
+                />
+                <Route
+                  path="/project/:id"
+                  element={
+                    <ErrorBoundary boundaryName="ProjectDetail">
+                      <ProjectDetail />
+                    </ErrorBoundary>
+                  }
+                />
+                <Route
+                  path="/admin"
                   element={
                     <AdminRoute>
-                      <AdminPanel />
+                      <ErrorBoundary boundaryName="AdminPanel">
+                        <AdminPanel />
+                      </ErrorBoundary>
                     </AdminRoute>
-                  } 
+                  }
                 />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
@@ -66,11 +83,13 @@ function AppRoutes() {
 
 function App() {
   return (
-    <AppProvider>
-      <HashRouter>
-        <AppRoutes />
-      </HashRouter>
-    </AppProvider>
+    <ErrorBoundary boundaryName="App">
+      <AppProvider>
+        <HashRouter>
+          <AppRoutes />
+        </HashRouter>
+      </AppProvider>
+    </ErrorBoundary>
   );
 }
 

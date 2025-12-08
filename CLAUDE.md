@@ -333,7 +333,41 @@ The app uses three distinct Gemini API features (all proxied through backend for
 
 ### Testing & Debugging
 
-**No formal test suite is configured.** Manual testing workflow:
+#### Automated Tests
+
+The project uses **Vitest** with React Testing Library for unit tests.
+
+**Running Tests**:
+```bash
+npm run test:run          # Run all tests once
+npx vitest --run          # Alternative: run tests once
+npx vitest                # Watch mode (re-runs on file changes)
+npx vitest --coverage     # Run with coverage report
+```
+
+**Test Structure**:
+```
+src/test/
+├── setup.ts              # Test setup (cleanup, mocks)
+└── test-utils.tsx        # Custom render with providers
+
+context/
+└── AppContext.test.tsx   # AppContext unit tests
+```
+
+**Test Coverage**:
+- `AppContext.test.tsx`: Comprehensive tests for global state management
+  - Authentication: login, logout, session persistence from localStorage
+  - Projects: add, edit, delete operations
+  - Results: add targets, update, delete operations
+  - History: fetch result history, trends data
+  - Error handling: graceful handling of API failures
+
+**Known Issue**: On some macOS configurations with Vitest 4.x, tests may timeout due to worker initialization issues. The test configuration uses `pool: 'vmForks'` as a workaround.
+
+#### Manual Testing Workflow
+
+For integration testing with the Gemini API:
 1. Create a project on Dashboard
 2. Add school/program targets in ProjectDetail
 3. Run extraction (calls Gemini API)
@@ -416,3 +450,176 @@ To migrate existing localStorage data to Neon:
 - **Database**: Neon provides serverless PostgreSQL with automatic scaling
 - Update `VITE_API_URL` to point to deployed backend URL
 - Ensure CORS is configured for your frontend domain
+
+---
+
+## Phase 2 Development (v1.0.0+)
+
+### Application Versioning
+
+The application follows **Semantic Versioning** (MAJOR.MINOR.PATCH):
+- **Current Version**: 1.0.0
+- Version is defined in `package.json` and `server/package.json`
+- Frontend displays version in sidebar footer via `src/config.ts`
+- Backend includes version in startup banner and `X-App-Version` response header
+- All changes documented in `CHANGELOG.md`
+
+### Centralized Configuration
+
+Configuration values are centralized to avoid hardcoding:
+
+**Frontend** (`src/config.ts`):
+- `APP_VERSION` - Current application version
+- `API_URL` - Backend API URL
+- `SEARCH_DEBOUNCE_MS` - Search input delay
+- Constants for statuses, roles, storage keys
+
+**Backend** (`server/config.js`):
+- `APP_VERSION` - Server version
+- `PORT` - Server port
+- `GEMINI_CONFIG` - AI model settings
+- `RATE_LIMITS` - API rate limiting config
+- `VALIDATION` - Input validation limits
+- `getCorsOrigins()` - CORS allowed origins
+
+### Input Validation
+
+All API endpoints validate input via `server/middleware/validation.js`:
+
+| Endpoint | Validation |
+|----------|------------|
+| `POST /api/projects` | Name ≤255 chars, Description ≤2000 chars |
+| `POST /api/results` | School/Program name ≤500 chars |
+| `POST /api/results/bulk` | Batch size ≤100 items |
+| `POST /api/results/bulk-delete` | Batch size ≤100 items |
+| `POST /api/gemini/extract` | School/Program required and ≤500 chars |
+| `POST /api/gemini/chat` | Message required and ≤10000 chars |
+| `POST /api/gemini/summary` | Results array required |
+
+Validation errors return standardized JSON:
+```json
+{
+  "error": true,
+  "code": "VALIDATION_ERROR",
+  "message": "Project name is required",
+  "details": { "errors": ["..."] }
+}
+```
+
+### Logger Utility
+
+A logger utility (`server/utils/logger.js`) provides environment-aware logging:
+- **Production**: Only errors and warnings logged
+- **Development**: All levels (debug, info, warn, error)
+- Methods: `logger.debug()`, `logger.info()`, `logger.warn()`, `logger.error()`
+- Specialized methods: `logger.request()` for API requests, `logger.db()` for database operations
+
+**Fully integrated** in all backend files:
+- `server/index.js` - Server startup and error handling
+- `server/db.js` - Database initialization and migrations
+- `server/routes/projects.js` - Project CRUD operations
+- `server/routes/results.js` - Results CRUD operations
+- `server/routes/gemini.js` - AI extraction endpoints
+
+### Database Constraints
+
+Added unique constraint to prevent duplicate result versions:
+```sql
+CREATE UNIQUE INDEX idx_results_unique_version
+ON extraction_results(project_id, school_name, program_name, extraction_version)
+```
+
+### File Structure Updates
+
+```
+server/
+├── config.js              # Centralized backend configuration (NEW)
+├── middleware/
+│   └── validation.js      # Input validation middleware (NEW)
+├── utils/
+│   └── logger.js          # Logger utility (NEW)
+└── ...
+
+src/
+├── config.ts              # Centralized frontend configuration (NEW)
+└── ...
+
+docs/
+├── scrum/
+│   └── PHASE_2_SCRUM_PLAN.md  # Development roadmap (NEW)
+└── ...
+
+CHANGELOG.md               # Version history (NEW)
+```
+
+### Development Roadmap
+
+See `docs/scrum/PHASE_2_SCRUM_PLAN.md` for the full development plan including:
+- Sprint 1: Foundation & Versioning (completed)
+- Sprint 2: Error Handling & Database optimizations (completed)
+  - ✅ Logger utility implementation complete
+  - ✅ All console.log/console.error replaced with logger
+  - ✅ ErrorBoundary component improved with:
+    - Named boundaries for better error tracking
+    - "Try Again" recovery button
+    - Expandable technical details
+    - Copy error to clipboard
+    - Development vs production mode handling
+    - Version display in error UI
+  - ✅ Database query optimizations:
+    - Added pagination support to results API
+    - Added filtering by status and confidence
+    - Created indexes for common query patterns
+  - ✅ Retry logic for Gemini API calls:
+    - Exponential backoff with jitter
+    - Automatic retry on transient errors (429, 503, timeouts)
+    - Up to 3 retries per request
+- Sprint 3: Testing & Documentation (in progress)
+  - ✅ Vitest test infrastructure configured
+  - ✅ AppContext unit tests implemented (authentication, CRUD, error handling)
+  - ✅ JSDoc documentation added to services/ and context/
+  - ✅ CHANGELOG.md updated with Sprint 2-3 progress
+  - ⏳ Additional component tests (pending)
+- Sprint 4: Performance & Polish
+
+### API Pagination
+
+The results API now supports optional pagination:
+
+```
+GET /api/results?project_id=xxx&page=1&limit=50&status=Success&confidence=High
+```
+
+Response with pagination:
+```json
+{
+  "data": [...],
+  "pagination": {
+    "page": 1,
+    "limit": 50,
+    "total": 150,
+    "totalPages": 3,
+    "hasMore": true
+  }
+}
+```
+
+Without `page`/`limit` params, returns backward-compatible array format.
+
+### Database Indexes
+
+The following indexes are automatically created for query optimization:
+- `idx_results_project_id` - Fast project lookups
+- `idx_results_history` - Version history queries
+- `idx_results_unique_version` - Prevent duplicate versions
+- `idx_results_status` - Status filtering
+- `idx_results_confidence` - Confidence filtering
+- `idx_results_extraction_date` - Date sorting
+
+### Retry Logic
+
+All Gemini API calls include automatic retry with exponential backoff:
+- Max retries: 3
+- Base delay: 1 second (doubles each retry)
+- Max delay: 10 seconds
+- Retryable errors: Rate limits (429), server errors (500/503), timeouts

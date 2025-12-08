@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { useDebounce } from '@/src/hooks/useDebounce';
 import { ExtractionResult, ConfidenceScore, ExtractionStatus } from '../types';
 import { AuditModal } from '../components/AuditModal';
 import { HistoryModal } from '../components/HistoryModal';
@@ -11,6 +12,7 @@ import { Search, RefreshCw, Bot, AlertTriangle, CheckCircle, ExternalLink, Eye, 
 import ReactMarkdown from 'react-markdown';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart as RePieChart, Pie, Legend, LineChart, Line } from 'recharts';
 import { ChatAssistant } from '../components/ChatAssistant';
+import { ConfirmDialog } from '@/src/components/ConfirmDialog';
 
 export const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +24,7 @@ export const ProjectDetail: React.FC = () => {
 
   const [viewMode, setViewMode] = useState<'table' | 'analysis'>('table');
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [selectedResult, setSelectedResult] = useState<ExtractionResult | null>(null);
   const [isAuditOpen, setIsAuditOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -43,10 +46,16 @@ export const ProjectDetail: React.FC = () => {
   const [editingTuitionId, setEditingTuitionId] = useState<string | null>(null);
   const [editingTuitionValue, setEditingTuitionValue] = useState<string>('');
 
-  // Filter logic
-  const filteredResults = projectResults.filter(result => 
-    result.school_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    result.program_name.toLowerCase().includes(searchTerm.toLowerCase())
+  // --- Confirmation Dialog State ---
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    type: 'deleteProject' | 'bulkDelete' | null;
+  }>({ isOpen: false, type: null });
+
+  // Filter logic (uses debounced search for performance)
+  const filteredResults = projectResults.filter(result =>
+    result.school_name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+    result.program_name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
   );
 
   const pendingCount = filteredResults.filter(r => r.status === ExtractionStatus.PENDING).length;
@@ -224,10 +233,15 @@ export const ProjectDetail: React.FC = () => {
   };
   
   const handleDeleteProject = () => {
-    if (project && window.confirm(`Are you sure you want to delete the ENTIRE project "${project.name}"? This will delete all ${projectResults.length} extracted records.`)) {
-        deleteProject(project.id);
-        navigate('/');
+    setConfirmDialog({ isOpen: true, type: 'deleteProject' });
+  };
+
+  const confirmDeleteProject = () => {
+    if (project) {
+      deleteProject(project.id);
+      navigate('/');
     }
+    setConfirmDialog({ isOpen: false, type: null });
   };
 
   // --- Selection Handlers ---
@@ -253,19 +267,21 @@ export const ProjectDetail: React.FC = () => {
 
   const handleBulkDelete = () => {
     if (selectedIds.size === 0) return;
+    setConfirmDialog({ isOpen: true, type: 'bulkDelete' });
+  };
 
-    if (window.confirm(`Are you sure you want to delete ${selectedIds.size} selected items?`)) {
-      // Convert Set to Array to iterate
-      Array.from(selectedIds).forEach(id => {
-        // We need the project ID for each item, but they all belong to this project
-        // However, standard deleteResult needs result.project_id to update counts
-        // Since we are in ProjectDetail, we know the project ID is `id` from params
-        if (project) {
-           deleteResult(id, project.id);
-        }
-      });
-      setSelectedIds(new Set());
-    }
+  const confirmBulkDelete = () => {
+    // Convert Set to Array to iterate
+    Array.from(selectedIds).forEach(id => {
+      // We need the project ID for each item, but they all belong to this project
+      // However, standard deleteResult needs result.project_id to update counts
+      // Since we are in ProjectDetail, we know the project ID is `id` from params
+      if (project) {
+        deleteResult(id, project.id);
+      }
+    });
+    setSelectedIds(new Set());
+    setConfirmDialog({ isOpen: false, type: null });
   };
 
   const handleStartEditTuition = (result: ExtractionResult) => {
@@ -824,6 +840,27 @@ export const ProjectDetail: React.FC = () => {
         isOpen={isChatOpen}
         onToggle={() => setIsChatOpen(!isChatOpen)}
         data={projectResults.filter(r => r.status === ExtractionStatus.SUCCESS)}
+      />
+
+      {/* Confirmation Dialogs */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen && confirmDialog.type === 'deleteProject'}
+        title="Delete Project"
+        message={`Are you sure you want to delete the entire project "${project?.name}"? This will permanently delete all ${projectResults.length} extracted records.`}
+        confirmLabel="Delete Project"
+        variant="danger"
+        onConfirm={confirmDeleteProject}
+        onCancel={() => setConfirmDialog({ isOpen: false, type: null })}
+      />
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen && confirmDialog.type === 'bulkDelete'}
+        title="Delete Selected Items"
+        message={`Are you sure you want to delete ${selectedIds.size} selected item${selectedIds.size > 1 ? 's' : ''}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={confirmBulkDelete}
+        onCancel={() => setConfirmDialog({ isOpen: false, type: null })}
       />
     </div>
   );

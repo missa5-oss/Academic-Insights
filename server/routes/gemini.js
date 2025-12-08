@@ -1,7 +1,77 @@
 import { Router } from 'express';
 import { GoogleGenAI } from '@google/genai';
+import { validateExtraction, validateChat, validateSummary } from '../middleware/validation.js';
+import { GEMINI_CONFIG } from '../config.js';
+import logger from '../utils/logger.js';
 
 const router = Router();
+
+// Retry configuration
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  baseDelayMs: 1000,
+  maxDelayMs: 10000,
+  retryableErrors: ['RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'DEADLINE_EXCEEDED', 'INTERNAL']
+};
+
+/**
+ * Sleep for a specified duration
+ */
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Calculate exponential backoff delay with jitter
+ */
+const getRetryDelay = (attempt) => {
+  const exponentialDelay = RETRY_CONFIG.baseDelayMs * Math.pow(2, attempt);
+  const jitter = Math.random() * 1000;
+  return Math.min(exponentialDelay + jitter, RETRY_CONFIG.maxDelayMs);
+};
+
+/**
+ * Check if an error is retryable
+ */
+const isRetryableError = (error) => {
+  const errorMessage = error.message || '';
+  const errorCode = error.code || '';
+
+  // Check for rate limiting or transient errors
+  if (errorMessage.includes('429') || errorMessage.includes('quota')) return true;
+  if (errorMessage.includes('503') || errorMessage.includes('unavailable')) return true;
+  if (errorMessage.includes('500') || errorMessage.includes('internal')) return true;
+  if (errorMessage.includes('timeout')) return true;
+
+  return RETRY_CONFIG.retryableErrors.some(code =>
+    errorCode.includes(code) || errorMessage.toUpperCase().includes(code)
+  );
+};
+
+/**
+ * Execute a function with retry logic
+ */
+const withRetry = async (fn, context = 'operation') => {
+  let lastError;
+
+  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+
+      if (attempt < RETRY_CONFIG.maxRetries && isRetryableError(error)) {
+        const delay = getRetryDelay(attempt);
+        logger.warn(`Retry ${attempt + 1}/${RETRY_CONFIG.maxRetries} for ${context} after ${Math.round(delay)}ms`, {
+          error: error.message
+        });
+        await sleep(delay);
+      } else {
+        break;
+      }
+    }
+  }
+
+  throw lastError;
+};
 
 // Initialize Gemini client
 const getClient = () => {
@@ -13,13 +83,9 @@ const getClient = () => {
 };
 
 // --- TUITION EXTRACTION ENDPOINT ---
-router.post('/extract', async (req, res) => {
+router.post('/extract', validateExtraction, async (req, res) => {
   try {
     const { school, program } = req.body;
-
-    if (!school || !program) {
-      return res.status(400).json({ error: 'Missing required fields: school, program' });
-    }
 
     const ai = getClient();
 
@@ -57,13 +123,17 @@ router.post('/extract', async (req, res) => {
       }
     `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }]
-      }
-    });
+    // Execute with retry logic for transient failures
+    const response = await withRetry(
+      () => ai.models.generateContent({
+        model: GEMINI_CONFIG.MODEL,
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }]
+        }
+      }),
+      `extraction:${school}`
+    );
 
     let jsonStr = response.text || '{}';
 
@@ -84,7 +154,7 @@ router.post('/extract', async (req, res) => {
     try {
       data = JSON.parse(jsonStr);
     } catch (e) {
-      console.warn('JSON Parse Failed, falling back to raw text', jsonStr);
+      logger.warn('JSON Parse Failed, falling back to raw text', { jsonStr });
       return res.status(200).json({
         status: 'Failed',
         raw_content: `Failed to parse AI response. Raw output: ${jsonStr}`
@@ -146,7 +216,7 @@ router.post('/extract', async (req, res) => {
     res.json(result);
 
   } catch (error) {
-    console.error('Extraction Error:', error);
+    logger.error('Extraction Error', error);
     res.status(500).json({
       status: 'Failed',
       raw_content: 'Agent failed to retrieve data due to system error.',
@@ -168,13 +238,17 @@ router.post('/location', async (req, res) => {
 
     const prompt = `Find the main campus address for ${school} offering the ${program}.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        tools: [{ googleMaps: {} }]
-      }
-    });
+    // Execute with retry logic for transient failures
+    const response = await withRetry(
+      () => ai.models.generateContent({
+        model: GEMINI_CONFIG.MODEL,
+        contents: prompt,
+        config: {
+          tools: [{ googleMaps: {} }]
+        }
+      }),
+      `location:${school}`
+    );
 
     const candidate = response.candidates?.[0];
     const groundingChunks = candidate?.groundingMetadata?.groundingChunks;
@@ -197,19 +271,15 @@ router.post('/location', async (req, res) => {
     res.json(null);
 
   } catch (error) {
-    console.error('Maps Extraction Error:', error);
+    logger.error('Maps Extraction Error', error);
     res.json(null);
   }
 });
 
 // --- EXECUTIVE SUMMARY ENDPOINT ---
-router.post('/summary', async (req, res) => {
+router.post('/summary', validateSummary, async (req, res) => {
   try {
     const { data } = req.body;
-
-    if (!data || !Array.isArray(data)) {
-      return res.status(400).json({ error: 'Missing or invalid data array' });
-    }
 
     const ai = getClient();
 
@@ -247,16 +317,20 @@ router.post('/summary', async (req, res) => {
       Format the output as professional Markdown with section headers.
     `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-    });
+    // Execute with retry logic for transient failures
+    const response = await withRetry(
+      () => ai.models.generateContent({
+        model: GEMINI_CONFIG.MODEL,
+        contents: prompt,
+      }),
+      'summary'
+    );
 
     const summary = response.text || 'No analysis generated.';
     res.json({ summary });
 
   } catch (error) {
-    console.error('Gemini API Error:', error);
+    logger.error('Gemini API Error', error);
     res.status(500).json({
       summary: 'Failed to generate analysis. Please try again later.',
       error: error.message
@@ -265,13 +339,9 @@ router.post('/summary', async (req, res) => {
 });
 
 // --- CHAT ENDPOINT (Streaming) ---
-router.post('/chat', async (req, res) => {
+router.post('/chat', validateChat, async (req, res) => {
   try {
     const { message, contextData, history } = req.body;
-
-    if (!message) {
-      return res.status(400).json({ error: 'Missing message' });
-    }
 
     const ai = getClient();
 
@@ -302,7 +372,7 @@ router.post('/chat', async (req, res) => {
   `;
 
     const chat = ai.chats.create({
-      model: 'gemini-2.5-flash',
+      model: GEMINI_CONFIG.MODEL,
       config: {
         systemInstruction
       },
@@ -327,7 +397,7 @@ router.post('/chat', async (req, res) => {
     res.end();
 
   } catch (error) {
-    console.error('Chat Error:', error);
+    logger.error('Chat Error', error);
 
     if (!res.headersSent) {
       res.status(500).json({
