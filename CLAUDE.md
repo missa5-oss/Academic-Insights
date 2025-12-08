@@ -20,8 +20,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Manual entry (one-by-one)
   - CSV import (bulk upload)
 - **Smart Data Validation**: AI intelligently prefers official .edu domains and in-state tuition rates
-- **Comprehensive Data Points**: Extracts tuition amount, period, academic year, cost per credit, total credits, and program length
-- **Confidence Scoring**: Each extraction receives High/Medium/Low confidence score based on data completeness
+- **In-State Tuition Preference**: Always extracts in-state (resident) rates; out-of-state rates stored in remarks
+- **Tuition-Only Calculations**: Total cost calculations exclude fees for uniform school comparisons
+- **Program Existence Verification**: Returns "Not Found" if program doesn't exist (prevents hallucination)
+- **Comprehensive Data Points**: Extracts:
+  - `stated_tuition`: Exact tuition as written on website
+  - `calculated_total_cost`: Tuition-only total (cost_per_credit × total_credits)
+  - `is_stem`: STEM designation status
+  - `additional_fees`: Separate fees field
+  - `actual_program_name`: Exact official program name
+  - Tuition amount, period, academic year, cost per credit, total credits, program length
+- **Confidence Scoring**: Each extraction receives High/Medium/Low confidence score based on data completeness and program existence verification
+- **Content Snippets**: Audit modal shows actual page content from source URLs (extracted from Gemini's grounding metadata)
 - **Campus Location Lookup**: Automatically fetch campus addresses and map URLs using Google Maps grounding
 - **Extraction Status Tracking**: Monitor extraction progress (Pending, Success, Not Found, Failed)
 
@@ -59,9 +69,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### 🔍 Data Auditing & Quality Control
 - **Audit Modal**: View detailed extraction metadata for each result:
   - Up to 3 validated source URLs with titles
-  - Raw content snippets (first 500 characters)
+  - Actual page content snippets (extracted from Gemini's grounding metadata, up to 10,000 characters)
+  - Website stated tuition vs calculated total cost comparison
+  - Confidence score breakdown with factors
+  - Source validation indicators (business school site verification)
   - Campus location with interactive map links
-  - Full extraction metadata (period, year, credits, etc.)
+  - Full extraction metadata (period, year, credits, STEM status, etc.)
+  - Editable fields: cost per credit, total credits, program length, user comments
 - **Manual Data Editing**: Edit tuition amounts directly in the table for corrections
 - **Flag System**: Mark results for review with visual flag indicators
 - **Source Validation**: View and verify the sources used for each extraction
@@ -130,7 +144,7 @@ Get your Neon connection string from [Neon Console](https://console.neon.tech)
 
 ### Running the App
 
-> **Last updated:** December 5, 2025
+> **Last updated:** December 8, 2025
 
 #### Quick Start (Recommended)
 ```bash
@@ -230,8 +244,13 @@ npm run preview      # Preview production build
 - Error boundaries prevent app crashes and provide user-friendly error messages
 
 **AI Integration**:
-The app uses three distinct Gemini API features (all proxied through backend for security):
+The app uses four distinct Gemini API features (all proxied through backend for security):
 1. **Google Search Grounding** (`POST /api/gemini/extract`): Extracts tuition data from official university websites
+   - Uses simplified, concise prompt structure for better performance
+   - Extracts in-state tuition rates (out-of-state in remarks)
+   - Calculates total cost using tuition only (excludes fees)
+   - Verifies program existence (returns "Not Found" if program doesn't exist)
+   - Extracts actual page content from grounding metadata for audit trail
 2. **Google Maps Grounding** (`POST /api/gemini/location`): Finds campus locations and addresses
 3. **Chat with Context** (`POST /api/gemini/chat`): Provides an AI analyst that can answer questions about extracted data (streaming)
 4. **Executive Summary** (`POST /api/gemini/summary`): Generates markdown analysis of tuition data
@@ -310,14 +329,32 @@ The app uses three distinct Gemini API features (all proxied through backend for
 - `PORT`: Server port (default: 3001)
 - `ALLOWED_ORIGINS`: (Optional) Comma-separated list of allowed CORS origins for production (default: `http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000`)
 
+### Recent Improvements (December 8, 2025)
+
+**AI Agent Optimization**:
+- **Simplified Prompt Structure**: Reverted from verbose XML-structured prompt to concise, direct instructions for better AI performance
+- **In-State Tuition Preference**: Always extracts in-state (resident) tuition; out-of-state rates stored in remarks field
+- **Tuition-Only Total Cost**: `calculated_total_cost` excludes fees for uniform school comparisons
+- **Program Existence Verification**: Returns "Not Found" with low confidence if program doesn't exist (prevents hallucination)
+- **Enhanced Data Fields**: Added `stated_tuition`, `calculated_total_cost`, `is_stem`, `additional_fees` fields
+- **Content Extraction**: Extracts actual page text from Gemini's supporting chunks (no additional HTTP requests)
+- **Removed Over-Engineering**: Removed complex school matching validation and content fetching that was causing issues
+
+See `AI_AGENT_COMPARISON.md` for detailed comparison of old vs new implementation.
+
 ### Important Implementation Details
 
 **Extraction Logic** (`server/routes/gemini.js:/extract`):
 - Backend endpoint proxies requests to Gemini API with Google Search grounding
-- Uses strict rules to prefer official .edu domains and in-state tuition rates
+- **Simplified Prompt Structure**: Uses concise, direct instructions (removed verbose XML structure) for better AI performance
+- **In-State Tuition Preference**: Always extracts in-state (resident) tuition rates; out-of-state rates stored in remarks field
+- **Tuition-Only Calculation**: `calculated_total_cost` uses ONLY tuition (cost_per_credit × total_credits), excludes fees for uniform comparison
+- **Program Existence Verification**: Returns "Not Found" with low confidence if program doesn't exist (prevents hallucination)
+- **Enhanced Data Fields**: Extracts `stated_tuition` (exact website text), `calculated_total_cost`, `is_stem`, `additional_fees`
+- **Content Extraction**: Extracts actual page text from Gemini's supporting chunks (grounding metadata) for audit trail
 - Validates sources using grounding metadata from Google Search
-- Extracts up to 3 source URLs for audit trail
-- Sets confidence to "Low" if `total_credits` cannot be found
+- Extracts up to 3 source URLs with actual page content snippets for audit trail
+- Sets confidence to "Low" if `total_credits` cannot be found or if program existence is uncertain
 - Returns structured JSON with tuition details, metadata, and raw content summary
 - Frontend calls via `services/geminiService.ts:simulateExtraction()`
 
@@ -381,16 +418,22 @@ import { useApp } from '@/context/AppContext';
 - `project_id` (TEXT, FK): References projects(id) with CASCADE delete
 - `school_name`, `program_name`: Target identifiers
 - `tuition_amount`, `tuition_period`, `academic_year`: Extracted data
+- `stated_tuition` (TEXT): Exact tuition as stated on website (preserves original format)
+- `calculated_total_cost` (TEXT): cost_per_credit × total_credits (tuition only, no fees)
 - `cost_per_credit`, `total_credits`, `program_length`, `remarks`: Metadata
+- `additional_fees` (TEXT): Technology fees, student services, etc. (separate from tuition)
+- `actual_program_name` (TEXT): Exact official program name from website
+- `is_stem` (BOOLEAN): STEM designation status (true if explicitly stated, false otherwise)
 - `location_data` (JSONB): Campus location from Maps grounding
 - `confidence_score`: High | Medium | Low
 - `status`: Success | Not Found | Pending | Failed
 - `source_url`: Primary source URL
-- `validated_sources` (JSONB): Array of source objects
+- `validated_sources` (JSONB): Array of source objects with actual page content snippets
 - `extraction_date`, `raw_content`: Audit trail
 - `is_flagged` (BOOLEAN): Manual flag for quality review
 - `extraction_version` (INTEGER): Version number for historical tracking (default: 1)
 - `extracted_at` (TIMESTAMP): Timestamp of when this version was extracted
+- `user_comments` (TEXT): User-editable notes/comments
 
 **Historical Tracking Pattern**:
 - Multiple rows can exist for the same school/program combination with different versions
