@@ -215,7 +215,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         program_length: null,
         remarks: null,
         extraction_version: 1,
-        extracted_at: new Date().toISOString()
+        extracted_at: new Date().toISOString(),
+        actual_program_name: null,
+        user_comments: null,
+        is_stem: null
       };
     });
 

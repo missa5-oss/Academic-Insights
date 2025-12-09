@@ -167,6 +167,39 @@ export async function initializeDatabase() {
       logger.debug('Index: idx_results_extraction_date already exists');
     }
 
+    // Add actual_program_name column if it doesn't exist (migration)
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS actual_program_name TEXT DEFAULT NULL
+      `;
+      logger.info('Migration: actual_program_name column added');
+    } catch (error) {
+      logger.debug('Migration: actual_program_name column already exists');
+    }
+
+    // Add user_comments column if it doesn't exist (migration)
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS user_comments TEXT DEFAULT NULL
+      `;
+      logger.info('Migration: user_comments column added');
+    } catch (error) {
+      logger.debug('Migration: user_comments column already exists');
+    }
+
+    // Add is_stem column if it doesn't exist (migration)
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS is_stem BOOLEAN DEFAULT NULL
+      `;
+      logger.info('Migration: is_stem column added');
+    } catch (error) {
+      logger.debug('Migration: is_stem column already exists');
+    }
+
     logger.info('Database schema initialized successfully');
   } catch (error) {
     logger.error('Database initialization error', error);

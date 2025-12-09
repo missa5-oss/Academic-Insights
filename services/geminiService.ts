@@ -185,6 +185,7 @@ export const generateExecutiveSummary = async (data: ExtractionResult[]): Promis
  */
 export const simulateExtraction = async (school: string, program: string): Promise<Partial<ExtractionResult>> => {
   try {
+    console.log(`[Frontend] Starting extraction for: ${school} - ${program}`);
     const response = await fetch(`${API_URL}/api/gemini/extract`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -192,35 +193,75 @@ export const simulateExtraction = async (school: string, program: string): Promi
     });
 
     if (!response.ok) {
-      console.error('Extraction API error:', response.statusText);
+      const errorText = await response.text();
+      console.error(`[Frontend] Extraction API error (${response.status}):`, errorText);
       return {
         status: ExtractionStatus.FAILED,
-        raw_content: `API request failed with status ${response.status}`
+        raw_content: `API request failed with status ${response.status}: ${errorText}`
       };
     }
 
     const data = await response.json();
+    console.log(`[Frontend] Extraction response received:`, { 
+      status: data.status, 
+      tuition: data.tuition_amount,
+      stated_tuition: data.stated_tuition,
+      confidence: data.confidence_score,
+      sources: data.validated_sources?.length || 0 
+    });
 
-    return {
+    // Map server status to ExtractionStatus enum
+    let status: ExtractionStatus;
+    if (data.status === "Not Found") {
+      status = ExtractionStatus.NOT_FOUND;
+    } else if (data.status === "Failed") {
+      status = ExtractionStatus.FAILED;
+    } else if (data.status === "Success") {
+      status = ExtractionStatus.SUCCESS;
+    } else {
+      console.warn(`[Frontend] Unknown status received: ${data.status}, defaulting to SUCCESS`);
+      status = ExtractionStatus.SUCCESS;
+    }
+
+    const result: Partial<ExtractionResult> = {
+      // Tuition data
       tuition_amount: data.tuition_amount,
+      stated_tuition: data.stated_tuition || null,
       tuition_period: data.tuition_period || "N/A",
       academic_year: data.academic_year || "2025-2026",
-      cost_per_credit: data.cost_per_credit,
-      total_credits: data.total_credits,
-      program_length: data.program_length,
-      remarks: data.remarks,
+      
+      // Detailed metadata
+      cost_per_credit: data.cost_per_credit || null,
+      total_credits: data.total_credits || null,
+      calculated_total_cost: data.calculated_total_cost || null,
+      program_length: data.program_length || null,
+      additional_fees: data.additional_fees || null,
+      remarks: data.remarks || null,
+      
+      // Program details
+      actual_program_name: data.actual_program_name || null,
+      is_stem: data.is_stem === true, // Default to false if not explicitly true
+      
+      // Confidence & validation
       confidence_score: (data.confidence_score as ConfidenceScore) || ConfidenceScore.MEDIUM,
-      status: data.status === "Not Found" ? ExtractionStatus.NOT_FOUND : ExtractionStatus.SUCCESS,
+      confidence_details: data.confidence_details || undefined,
+      source_validation: data.source_validation || undefined,
+      
+      // Status & sources
+      status: status,
       source_url: data.source_url,
       validated_sources: data.validated_sources || [],
       raw_content: data.raw_content || "No content summary provided."
     };
 
+    console.log(`[Frontend] Extraction completed: Status=${status}, Confidence=${result.confidence_score}, STEM=${result.is_stem}`);
+    return result;
+
   } catch (error) {
-    console.error("Extraction Error:", error);
+    console.error("[Frontend] Extraction Error:", error);
     return {
       status: ExtractionStatus.FAILED,
-      raw_content: "Agent failed to retrieve data due to system error."
+      raw_content: `Agent failed to retrieve data due to system error: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
   }
 };

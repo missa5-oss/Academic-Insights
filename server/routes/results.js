@@ -130,7 +130,8 @@ router.post('/', validateResult, async (req, res) => {
       id, project_id, school_name, program_name, tuition_amount,
       tuition_period, academic_year, cost_per_credit, total_credits,
       program_length, remarks, location_data, confidence_score,
-      status, source_url, validated_sources, extraction_date, raw_content
+      status, source_url, validated_sources, extraction_date, raw_content,
+      actual_program_name, user_comments
     } = req.body;
 
     const [result] = await sql`
@@ -138,13 +139,15 @@ router.post('/', validateResult, async (req, res) => {
         id, project_id, school_name, program_name, tuition_amount,
         tuition_period, academic_year, cost_per_credit, total_credits,
         program_length, remarks, location_data, confidence_score,
-        status, source_url, validated_sources, extraction_date, raw_content
+        status, source_url, validated_sources, extraction_date, raw_content,
+        actual_program_name, user_comments
       )
       VALUES (
         ${id}, ${project_id}, ${school_name}, ${program_name}, ${tuition_amount},
         ${tuition_period}, ${academic_year}, ${cost_per_credit}, ${total_credits},
         ${program_length}, ${remarks}, ${JSON.stringify(location_data)}, ${confidence_score},
-        ${status}, ${source_url}, ${JSON.stringify(validated_sources)}, ${extraction_date}, ${raw_content}
+        ${status}, ${source_url}, ${JSON.stringify(validated_sources)}, ${extraction_date}, ${raw_content},
+        ${actual_program_name || null}, ${user_comments || null}
       )
       RETURNING *
     `;
@@ -167,7 +170,8 @@ router.post('/bulk', validateBulkResults, async (req, res) => {
         id, project_id, school_name, program_name, tuition_amount,
         tuition_period, academic_year, cost_per_credit, total_credits,
         program_length, remarks, location_data, confidence_score,
-        status, source_url, validated_sources, extraction_date, raw_content
+        status, source_url, validated_sources, extraction_date, raw_content,
+        actual_program_name, user_comments
       } = result;
 
       const [inserted] = await sql`
@@ -175,13 +179,15 @@ router.post('/bulk', validateBulkResults, async (req, res) => {
           id, project_id, school_name, program_name, tuition_amount,
           tuition_period, academic_year, cost_per_credit, total_credits,
           program_length, remarks, location_data, confidence_score,
-          status, source_url, validated_sources, extraction_date, raw_content
+          status, source_url, validated_sources, extraction_date, raw_content,
+          actual_program_name, user_comments
         )
         VALUES (
           ${id}, ${project_id}, ${school_name}, ${program_name}, ${tuition_amount},
           ${tuition_period}, ${academic_year}, ${cost_per_credit}, ${total_credits},
           ${program_length}, ${remarks}, ${JSON.stringify(location_data)}, ${confidence_score},
-          ${status}, ${source_url}, ${JSON.stringify(validated_sources)}, ${extraction_date}, ${raw_content}
+          ${status}, ${source_url}, ${JSON.stringify(validated_sources)}, ${extraction_date}, ${raw_content},
+          ${actual_program_name || null}, ${user_comments || null}
         )
         RETURNING *
       `;
@@ -203,7 +209,8 @@ router.put('/:id', async (req, res) => {
       tuition_amount, tuition_period, academic_year, cost_per_credit,
       total_credits, program_length, remarks, location_data,
       confidence_score, status, source_url, validated_sources,
-      extraction_date, raw_content, is_flagged
+      extraction_date, raw_content, is_flagged,
+      actual_program_name, user_comments, is_stem
     } = req.body;
 
     const [result] = await sql`
@@ -223,7 +230,10 @@ router.put('/:id', async (req, res) => {
         validated_sources = COALESCE(${validated_sources ? JSON.stringify(validated_sources) : null}, validated_sources),
         extraction_date = COALESCE(${extraction_date}, extraction_date),
         raw_content = COALESCE(${raw_content}, raw_content),
-        is_flagged = CASE WHEN ${is_flagged}::boolean IS NULL THEN is_flagged ELSE ${is_flagged}::boolean END
+        is_flagged = CASE WHEN ${is_flagged}::boolean IS NULL THEN is_flagged ELSE ${is_flagged}::boolean END,
+        actual_program_name = COALESCE(${actual_program_name}, actual_program_name),
+        user_comments = COALESCE(${user_comments}, user_comments),
+        is_stem = CASE WHEN ${is_stem}::boolean IS NULL THEN is_stem ELSE ${is_stem}::boolean END
       WHERE id = ${req.params.id}
       RETURNING *
     `;

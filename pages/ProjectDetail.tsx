@@ -170,25 +170,8 @@ export const ProjectDetail: React.FC = () => {
   const handleExportCSV = () => {
     if (filteredResults.length === 0) return;
 
-    const headers = [
-      "School Name",
-      "Program Name",
-      "Tuition Amount",
-      "Period",
-      "Academic Year",
-      "Location",
-      "Cost Per Credit",
-      "Total Credits",
-      "Program Length",
-      "Status",
-      "Confidence",
-      "Remarks",
-      "Source URL",
-      "HTML Content Snippet"
-    ];
-
-    const escapeCsv = (val: string | null | undefined) => {
-      if (!val) return "";
+    const escapeCsv = (val: string | null | undefined | boolean | number) => {
+      if (val === null || val === undefined) return "";
       const str = String(val);
       if (str.includes(",") || str.includes("\"") || str.includes("\n")) {
         return `"${str.replace(/"/g, '""')}"`;
@@ -196,22 +179,68 @@ export const ProjectDetail: React.FC = () => {
       return str;
     };
 
-    const rows = filteredResults.map(r => [
-      escapeCsv(r.school_name),
-      escapeCsv(r.program_name),
-      escapeCsv(r.tuition_amount),
-      escapeCsv(r.tuition_period),
-      escapeCsv(r.academic_year),
-      escapeCsv(r.location_data?.address),
-      escapeCsv(r.cost_per_credit),
-      escapeCsv(r.total_credits),
-      escapeCsv(r.program_length),
-      escapeCsv(r.status),
-      escapeCsv(r.confidence_score),
-      escapeCsv(r.remarks),
-      escapeCsv(r.source_url),
-      escapeCsv(r.raw_content)
-    ].join(","));
+    const headers = [
+      "School Name",
+      "Program Name",
+      "Official Program Name",
+      "Tuition Amount",
+      "Period",
+      "Academic Year",
+      "Cost Per Credit",
+      "Total Credits",
+      "Program Length",
+      "Status",
+      "Confidence Score",
+      "Is STEM",
+      "Is Flagged",
+      "Remarks",
+      "User Comments",
+      "Location Address",
+      "Location Map URL",
+      "Location Latitude",
+      "Location Longitude",
+      "Primary Source URL",
+      "Validated Sources (JSON)",
+      "Extraction Date",
+      "Extraction Version",
+      "Extracted At",
+      "Raw Content Snippet"
+    ];
+
+    const rows = filteredResults.map(r => {
+      // Format validated sources as JSON string
+      const validatedSourcesJson = r.validated_sources && r.validated_sources.length > 0
+        ? JSON.stringify(r.validated_sources)
+        : "";
+
+      return [
+        escapeCsv(r.school_name),
+        escapeCsv(r.program_name),
+        escapeCsv(r.actual_program_name),
+        escapeCsv(r.tuition_amount),
+        escapeCsv(r.tuition_period),
+        escapeCsv(r.academic_year),
+        escapeCsv(r.cost_per_credit),
+        escapeCsv(r.total_credits),
+        escapeCsv(r.program_length),
+        escapeCsv(r.status),
+        escapeCsv(r.confidence_score),
+        escapeCsv(r.is_stem === true ? "Yes" : r.is_stem === false ? "No" : ""),
+        escapeCsv(r.is_flagged ? "Yes" : "No"),
+        escapeCsv(r.remarks),
+        escapeCsv(r.user_comments),
+        escapeCsv(r.location_data?.address),
+        escapeCsv(r.location_data?.map_url),
+        escapeCsv(r.location_data?.latitude),
+        escapeCsv(r.location_data?.longitude),
+        escapeCsv(r.source_url),
+        escapeCsv(validatedSourcesJson),
+        escapeCsv(r.extraction_date),
+        escapeCsv(r.extraction_version),
+        escapeCsv(r.extracted_at),
+        escapeCsv(r.raw_content)
+      ].join(",");
+    });
 
     const csvContent = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
