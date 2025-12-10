@@ -431,20 +431,49 @@ export const AuditModal: React.FC<AuditModalProps> = ({ isOpen, onClose, data })
                                       PRIMARY
                                     </span>
                                   )}
-                                  {source.raw_content && 
+                                  {source.url?.includes('vertexaisearch.cloud.google.com') && (
+                                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-semibold rounded flex-shrink-0" title="Via Google Grounding API">
+                                      GROUNDED
+                                    </span>
+                                  )}
+                                  {source.raw_content &&
                                    !source.raw_content.includes('Could not fetch content') &&
                                    !source.raw_content.includes('No extractable text content found') &&
                                    source.raw_content.trim().length > 0 ? (
-                                    <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-semibold rounded flex-shrink-0" title="Page content fetched directly from URL">
-                                      FETCHED
+                                    <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-semibold rounded flex-shrink-0" title="Page content extracted from grounding chunks">
+                                      CONTENT ✓
                                     </span>
                                   ) : (
-                                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-semibold rounded flex-shrink-0" title="Could not fetch content from URL">
-                                      BLOCKED
+                                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-semibold rounded flex-shrink-0" title="No content extracted">
+                                      NO CONTENT
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-xs text-slate-400 truncate mt-0.5">{source.url}</p>
+                                <div className="mt-0.5">
+                                  {source.url?.includes('vertexaisearch.cloud.google.com') ? (
+                                    <>
+                                      <p className="text-xs text-slate-600 font-medium">Domain: {source.title}</p>
+                                      <a
+                                        href={source.url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-[10px] text-blue-600 hover:text-blue-800 hover:underline truncate block"
+                                        title="Click to visit via Google Grounding redirect"
+                                      >
+                                        Via Vertex AI Grounding →
+                                      </a>
+                                    </>
+                                  ) : (
+                                    <a
+                                      href={source.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-xs text-slate-500 hover:text-blue-600 hover:underline truncate block"
+                                    >
+                                      {source.url}
+                                    </a>
+                                  )}
+                                </div>
                             </div>
                             <div className={`p-1 rounded transition-transform ${expandedSources.has(idx) ? 'rotate-180' : ''}`}>
                               <ChevronDown size={18} className="text-slate-400" />

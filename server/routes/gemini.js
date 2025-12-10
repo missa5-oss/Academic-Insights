@@ -188,13 +188,19 @@ Search "${school}" "${program}" tuition site:.edu
 
 CRITICAL: Only use .edu official sources. Ignore clearadmit, poets&quants, shiksha, collegechoice.
 
+PROGRAM NAME VARIATIONS:
+- If searching for "Part-Time MBA", also check: Professional MBA, Weekend MBA, Evening MBA, Working Professional MBA
+- If searching for "Executive MBA", also check: EMBA, Exec MBA
+- Schools may use different names for the same program type
+
 RULES:
 - tuition_amount = TOTAL PROGRAM COST (cost_per_credit × total_credits)
+- Do NOT include the word "total" in tuition_amount, just the dollar amount
 - Use IN-STATE rates, put out-of-state in remarks
 - If not found on .edu site, status="Not Found"
 
 OUTPUT - Return ONLY this JSON, no other text:
-{"tuition_amount":"$XX,XXX total","tuition_period":"full program","academic_year":"2024-2025","cost_per_credit":"$X,XXX","total_credits":"XX","program_length":"X years","actual_program_name":"name","is_stem":false,"additional_fees":null,"remarks":null,"status":"Success","raw_content":"quote from .edu site"}
+{"tuition_amount":"$XX,XXX","tuition_period":"full program","academic_year":"2024-2025","cost_per_credit":"$X,XXX","total_credits":"XX","program_length":"X years","actual_program_name":"name","is_stem":false,"additional_fees":null,"remarks":null,"status":"Success"}
   `;
 
   const response = await withRetry(
@@ -404,12 +410,49 @@ router.post('/extract', validateExtraction, async (req, res) => {
         confidenceScore = 'Low';
     }
 
-    // Use the tuition amount exactly as found by the LLM
+    // Use the tuition amount, but sanitize to remove "total" suffix
     let tuitionAmount = extractedData.tuition_amount || null;
+    if (tuitionAmount) {
+      // Remove " total" or "total" from the tuition amount
+      tuitionAmount = tuitionAmount.replace(/\s*total\s*$/i, '').trim();
+    }
     let tuitionPeriod = extractedData.tuition_period || 'N/A';
 
+    // Extract raw_content from grounding chunks (actual page content)
+    let rawContentSummary = '';
+    if (validatedSources.length > 0) {
+      // Aggregate content from all sources
+      const contentPieces = validatedSources
+        .filter(source => source.raw_content &&
+                source.raw_content.length > 50 &&
+                !source.raw_content.includes('No extractable text content found'))
+        .map(source => source.raw_content);
+
+      if (contentPieces.length > 0) {
+        rawContentSummary = contentPieces.join('\n\n---\n\n');
+        // Truncate if too long (reserve space for message)
+        const MAX_RAW_CONTENT = 9900;
+        if (rawContentSummary.length > MAX_RAW_CONTENT) {
+          rawContentSummary = rawContentSummary.substring(0, MAX_RAW_CONTENT) +
+            '\n\n... [content truncated - showing first 9,900 characters from ' + contentPieces.length + ' source(s)]';
+        }
+      }
+    }
+
+    // Fallback: if no content from sources, create a summary from extracted data
+    if (!rawContentSummary || rawContentSummary.length < 50) {
+      rawContentSummary = `Extracted from ${school}:\n` +
+        `Program: ${extractedData.actual_program_name || program}\n` +
+        `Tuition: ${tuitionAmount || 'Not found'}\n` +
+        `Credits: ${extractedData.total_credits || 'Not specified'}\n` +
+        `Cost per credit: ${extractedData.cost_per_credit || 'Not specified'}\n` +
+        `Program length: ${extractedData.program_length || 'Not specified'}\n` +
+        `STEM: ${extractedData.is_stem ? 'Yes' : 'No'}\n` +
+        (extractedData.remarks ? `\nNotes: ${extractedData.remarks}` : '');
+    }
+
     // Sanitize raw_content for database storage
-    const sanitizedRawContent = sanitizeForDatabase(extractedData.raw_content) || 'No content summary provided.';
+    const sanitizedRawContent = sanitizeForDatabase(rawContentSummary) || 'No content summary provided.';
 
     const result = {
       tuition_amount: formatCurrency(tuitionAmount),

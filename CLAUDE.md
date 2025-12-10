@@ -329,9 +329,9 @@ The app uses four distinct Gemini API features (all proxied through backend for 
 - `PORT`: Server port (default: 3001)
 - `ALLOWED_ORIGINS`: (Optional) Comma-separated list of allowed CORS origins for production (default: `http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000`)
 
-### Recent Improvements (December 8, 2025)
+### Recent Improvements (December 10, 2025)
 
-**AI Agent Optimization**:
+**AI Agent Optimization** (December 8):
 - **Simplified Prompt Structure**: Reverted from verbose XML-structured prompt to concise, direct instructions for better AI performance
 - **In-State Tuition Preference**: Always extracts in-state (resident) tuition; out-of-state rates stored in remarks field
 - **Tuition-Only Total Cost**: `calculated_total_cost` excludes fees for uniform school comparisons
@@ -340,18 +340,56 @@ The app uses four distinct Gemini API features (all proxied through backend for 
 - **Content Extraction**: Extracts actual page text from Gemini's supporting chunks (no additional HTTP requests)
 - **Removed Over-Engineering**: Removed complex school matching validation and content fetching that was causing issues
 
-See `AI_AGENT_COMPARISON.md` for detailed comparison of old vs new implementation.
+**Extraction Sources Fix** (December 10):
+- **Fixed `raw_content` Bug**: Was storing AI's JSON response instead of actual webpage content
+  - Now properly extracts content from grounding chunks
+  - Aggregates content from multiple sources
+  - Includes fallback summary when no grounding chunks available
+- **Improved Source URL Handling**: Better display of Google Vertex AI redirect URLs
+  - Shows domain prominently (e.g., "jhu.edu")
+  - Displays "Via Vertex AI Grounding" link
+  - Added "GROUNDED" and "CONTENT ✓" badges in UI
+- **Issue Diagnosed**: Google Search grounding intermittently returns empty chunks (~20% of cases)
+  - This is a Google API limitation, not fixable on our end
+  - Fallback content summary provided when this occurs
+
+**Tuition Data Cleanup** (December 10):
+- **Removed "total" Suffix**: Tuition amounts now store clean dollar values
+  - Prompt updated to exclude "total" from output
+  - Sanitization regex removes " total" suffix as backup
+  - Example: `"$76,000"` instead of `"$76,000 total"`
+
+**Program Name Recognition** (December 10):
+- **Added Alternative Program Names**: AI now searches for program variations
+  - Part-Time MBA → Professional MBA, Weekend MBA, Evening MBA, Working Professional MBA
+  - Executive MBA → EMBA, Exec MBA
+  - Helps find programs when schools use different naming conventions
+
+See `docs/EXTRACTION_SOURCES_FIX.md` and `docs/EXTRACTION_PROMPT_IMPROVEMENTS.md` for detailed documentation.
 
 ### Important Implementation Details
 
 **Extraction Logic** (`server/routes/gemini.js:/extract`):
 - Backend endpoint proxies requests to Gemini API with Google Search grounding
-- **Simplified Prompt Structure**: Uses concise, direct instructions (removed verbose XML structure) for better AI performance
+- **Simplified Prompt Structure**: Uses concise, direct instructions for better AI performance
+- **Program Name Variations**: Recognizes alternative names for program types
+  - Part-Time MBA → Professional MBA, Weekend MBA, Evening MBA, Working Professional MBA
+  - Executive MBA → EMBA, Exec MBA
 - **In-State Tuition Preference**: Always extracts in-state (resident) tuition rates; out-of-state rates stored in remarks field
 - **Tuition-Only Calculation**: `calculated_total_cost` uses ONLY tuition (cost_per_credit × total_credits), excludes fees for uniform comparison
+- **Clean Tuition Format**: Removes "total" suffix from tuition amounts (e.g., `"$76,000"` not `"$76,000 total"`)
+  - Prompt instructs AI to exclude "total"
+  - Regex sanitization as backup: `tuitionAmount.replace(/\s*total\s*$/i, '')`
 - **Program Existence Verification**: Returns "Not Found" with low confidence if program doesn't exist (prevents hallucination)
 - **Enhanced Data Fields**: Extracts `stated_tuition` (exact website text), `calculated_total_cost`, `is_stem`, `additional_fees`
-- **Content Extraction**: Extracts actual page text from Gemini's supporting chunks (grounding metadata) for audit trail
+- **Content Extraction from Grounding Chunks**: Extracts actual page text from Gemini's supporting chunks (grounding metadata)
+  - Aggregates content from all validated sources
+  - Fallback to extraction summary if no grounding chunks available
+  - **Fixed Bug**: Previously stored AI's JSON response instead of page content
+- **Source URL Handling**: Google returns Vertex AI redirect URLs, not direct .edu URLs
+  - UI displays domain (e.g., "jhu.edu") prominently
+  - Clickable "Via Vertex AI Grounding" link provided
+  - Badges: "GROUNDED", "CONTENT ✓" to show data quality
 - Validates sources using grounding metadata from Google Search
 - Extracts up to 3 source URLs with actual page content snippets for audit trail
 - Sets confidence to "Low" if `total_credits` cannot be found or if program existence is uncertain
@@ -367,6 +405,38 @@ See `AI_AGENT_COMPARISON.md` for detailed comparison of old vs new implementatio
 - Uses Google Maps grounding to find campus addresses
 - Extracts map URL and address from grounding chunks
 - Returns `null` if no valid location found
+
+### Known Issues & Limitations
+
+#### Google Grounding API Limitations
+
+**Empty Grounding Chunks (~20% of extractions)**:
+- Google Search grounding sometimes returns no `groundingChunks`
+- Results in empty `validated_sources` array
+- **This is a Google API limitation** - cannot be fixed on our end
+- Workaround: Fallback content summary is provided showing extracted data
+- User sees "Legacy Source" section with extraction summary instead of source URLs
+
+**Redirect URLs Instead of Direct .edu URLs**:
+- Google returns `vertexaisearch.cloud.google.com/grounding-api-redirect/...` URLs
+- Actual domain (e.g., "jhu.edu") is only in the `title` field
+- **This is by design from Google's Grounding API**
+- UI workaround: Display domain prominently with clickable redirect link
+
+#### Program Naming Variations
+
+Some schools use different names for similar program types:
+- "Part-Time MBA" may be called "Professional MBA", "Weekend MBA", or "Evening MBA"
+- "Executive MBA" may be abbreviated as "EMBA"
+- The prompt now includes these variations to improve finding programs
+- The `actual_program_name` field stores what the school actually calls it
+
+#### Tuition Data Consistency
+
+- Some schools list tuition per credit, some as total program cost
+- The AI attempts to calculate total cost (cost_per_credit × total_credits)
+- If calculation fields are missing, `calculated_total_cost` may be null
+- Always verify extracted data in Audit Modal against source URLs
 
 ### Testing & Debugging
 
@@ -420,6 +490,21 @@ For integration testing with the Gemini API:
 - Verify `DATABASE_URL` is correct in `server/.env`
 - Review grounding metadata in backend API responses for source validation
 - Use browser DevTools Network tab to inspect API calls to `/api/gemini/*`
+
+**Diagnostic Scripts**:
+- `server/check-sources.js` - Inspect validated_sources in database, check for empty sources
+- `server/check-gwu.js` - Check specific school extraction (George Washington University example)
+- Usage: `node server/check-sources.js` to see recent extractions and source data
+
+**Server Logs to Monitor**:
+```
+[INFO] Grounding sources for School - Program: [{ title: 'domain.edu', url: '...' }]
+[INFO] Grounding snippets for School - Program: [{ url: '...', text: '...' }]
+[WARN] No grounding chunks returned from Google Search for: Some School - Program
+[INFO] Extraction success for: School - Program
+```
+
+These logs help diagnose whether Google grounding is returning sources or not.
 
 **Common Issues & Solutions**:
 
@@ -666,3 +751,82 @@ All Gemini API calls include automatic retry with exponential backoff:
 - Base delay: 1 second (doubles each retry)
 - Max delay: 10 seconds
 - Retryable errors: Rate limits (429), server errors (500/503), timeouts
+
+---
+
+## Additional Documentation
+
+The `docs/` directory contains detailed documentation for specific features and fixes:
+
+### Extraction & AI Features
+- **`EXTRACTION_SOURCES_FIX.md`** - Complete diagnosis and fix for "Sources Not Found" issue
+  - Root cause analysis of empty `validated_sources`
+  - Fix for `raw_content` storing AI JSON instead of page content
+  - Google Vertex AI redirect URL handling
+  - Before/after comparisons with database inspection results
+
+- **`EXTRACTION_PROMPT_IMPROVEMENTS.md`** - Recent prompt enhancements
+  - Removal of "total" from tuition amounts
+  - Source restriction to official business school websites
+  - Program name variation recognition
+
+### UI & Component Audits
+- **`EXTRACTION_UI_AUDIT.md`** - Comprehensive UI analysis of extraction grounding chunks
+- **`EXTRACTION_UI_FIXES.md`** - UI improvements for source display
+- **`UI_RENDERING_AUDIT.md`** - General UI rendering analysis
+
+### Development & Planning
+- **`scrum/PHASE_2_SCRUM_PLAN.md`** - Sprint-based development roadmap
+  - Sprint 1: Foundation & Versioning
+  - Sprint 2: Error Handling & Database optimizations
+  - Sprint 3: Testing & Documentation (current)
+  - Sprint 4: Performance & Polish
+
+### Test Results
+- **`test-extraction-results.md`** - Documented test extraction results
+
+### Version History
+- **`../CHANGELOG.md`** - Complete version history and change log
+
+---
+
+## Quick Reference
+
+### Current Application Version
+**v1.0.0** (December 10, 2025)
+
+### Key Files Modified Recently
+- `server/routes/gemini.js` (lines 185-417) - Extraction prompt and logic
+- `components/AuditModal.tsx` (lines 426-477) - Source URL display improvements
+- `CLAUDE.md` - This documentation file
+
+### Latest Prompt Configuration
+Located at `server/routes/gemini.js:186-204`:
+- Searches `.edu` official sources only
+- Recognizes program name variations (Part-Time MBA → Professional/Weekend/Evening MBA)
+- Excludes "total" from tuition amounts
+- Returns "Not Found" if program doesn't exist
+- Uses in-state tuition rates
+
+### Data Quality Indicators
+- **High Confidence**: Has tuition_amount, cost_per_credit, and total_credits
+- **Medium Confidence**: Has tuition_amount but missing some calculation fields
+- **Low Confidence**: Missing tuition_amount or program not found
+- **Status "Not Found"**: Program doesn't exist at school (AI verified)
+
+### Debugging Quick Commands
+```bash
+# Check if backend is running
+lsof -i :3001
+
+# Test API directly
+curl http://localhost:3001/api/projects
+
+# Check recent extractions in database
+node server/check-sources.js
+
+# Test a specific extraction
+curl -X POST http://localhost:3001/api/gemini/extract \
+  -H "Content-Type: application/json" \
+  -d '{"school": "School Name", "program": "Program Name"}'
+```
