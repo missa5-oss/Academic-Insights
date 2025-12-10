@@ -589,6 +589,12 @@ export const ProjectDetail: React.FC = () => {
                           <div>
                             <span className="font-semibold text-slate-900">{result.tuition_amount}</span>
                             <div className="text-xs text-slate-400">{result.tuition_period}</div>
+                            {result.updated_at && (
+                              <div className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                                <Clock size={12} />
+                                {new Date(result.updated_at).toLocaleDateString()}
+                              </div>
+                            )}
                           </div>
                           <button
                             onClick={() => handleStartEditTuition(result)}

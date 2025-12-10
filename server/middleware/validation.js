@@ -213,7 +213,7 @@ export const validateExtraction = (req, res, next) => {
  * Validate chat request
  */
 export const validateChat = (req, res, next) => {
-  const { message, context } = req.body;
+  const { message, contextData, history } = req.body;
 
   if (!message || typeof message !== 'string' || message.trim() === '') {
     return errorResponse(res, 'VALIDATION_ERROR', 'Message is required');
@@ -223,8 +223,12 @@ export const validateChat = (req, res, next) => {
     return errorResponse(res, 'VALIDATION_ERROR', 'Message must be 10000 characters or less');
   }
 
-  if (context && typeof context !== 'string') {
-    return errorResponse(res, 'VALIDATION_ERROR', 'Context must be a string');
+  if (contextData && !Array.isArray(contextData)) {
+    return errorResponse(res, 'VALIDATION_ERROR', 'ContextData must be an array');
+  }
+
+  if (history && !Array.isArray(history)) {
+    return errorResponse(res, 'VALIDATION_ERROR', 'History must be an array');
   }
 
   next();
@@ -234,14 +238,14 @@ export const validateChat = (req, res, next) => {
  * Validate summary request
  */
 export const validateSummary = (req, res, next) => {
-  const { results } = req.body;
+  const { data } = req.body;
 
-  if (!Array.isArray(results)) {
-    return errorResponse(res, 'VALIDATION_ERROR', 'Results must be an array');
+  if (!Array.isArray(data)) {
+    return errorResponse(res, 'VALIDATION_ERROR', 'Data must be an array');
   }
 
-  if (results.length === 0) {
-    return errorResponse(res, 'VALIDATION_ERROR', 'Results array cannot be empty');
+  if (data.length === 0) {
+    return errorResponse(res, 'VALIDATION_ERROR', 'Data array cannot be empty');
   }
 
   next();

@@ -89,6 +89,86 @@ function sanitizeForDatabase(text) {
         .trim();
 }
 
+// Helper function to safely parse JSON from LLM responses
+function safeParseJSON(text, context = 'extraction') {
+    if (!text || typeof text !== 'string') {
+        logger.warn(`Invalid JSON input for ${context}: not a string`);
+        return null;
+    }
+
+    // Try direct parse first (most common case)
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        // LLM may have wrapped JSON in markdown code blocks
+        const markdownMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (markdownMatch) {
+            try {
+                return JSON.parse(markdownMatch[1]);
+            } catch (innerError) {
+                logger.warn(`Failed to parse JSON from markdown for ${context}`, { error: innerError.message });
+            }
+        }
+
+        // Try extracting raw JSON object (handles nested braces better)
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            try {
+                return JSON.parse(jsonMatch[0]);
+            } catch (objectError) {
+                logger.warn(`Failed to parse extracted JSON object for ${context}`, { error: objectError.message });
+            }
+        }
+
+        logger.error(`Unable to parse JSON for ${context}. Response: ${text.substring(0, 500)}`);
+        return null;
+    }
+}
+
+// Helper function to validate URL format
+function isValidUrl(urlString) {
+    if (!urlString || typeof urlString !== 'string') {
+        return false;
+    }
+    try {
+        new URL(urlString);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+// Helper function to format currency values with $ prefix
+function formatCurrency(value) {
+    if (value === null || value === undefined || value === '') {
+        return null;
+    }
+
+    const strValue = String(value).trim();
+
+    // If already starts with $, return as-is (it's already formatted)
+    if (strValue.startsWith('$')) {
+        return strValue;
+    }
+
+    // Check if it looks like a number or currency string (allows $ later in string for non-numeric values)
+    if (/^[\d\s,.-]+$/.test(strValue) || /^\$?[\d\s,.-]+$/.test(strValue)) {
+        // Remove any existing currency symbols and extract numeric part
+        const numericPart = strValue.replace(/[^\d.-]/g, '');
+
+        // Validate it's a valid number
+        if (numericPart === '' || numericPart === '-' || numericPart === '.') {
+            return '$' + strValue; // Fallback: prepend $ to original value
+        }
+
+        // Prepend $
+        return '$' + strValue;
+    }
+
+    // For non-numeric strings, just prepend $
+    return '$' + strValue;
+}
+
 // Initialize Gemini client
 const getClient = () => {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -98,123 +178,158 @@ const getClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
+/**
+ * Extract complete tuition and program information in a single API call
+ * Combines tuition, fees, credits, and program details for efficiency
+ */
+async function extractProgramInfo(ai, school, program) {
+  const prompt = `
+Search "${school}" "${program}" tuition site:.edu
+
+CRITICAL: Only use .edu official sources. Ignore clearadmit, poets&quants, shiksha, collegechoice.
+
+RULES:
+- tuition_amount = TOTAL PROGRAM COST (cost_per_credit × total_credits)
+- Use IN-STATE rates, put out-of-state in remarks
+- If not found on .edu site, status="Not Found"
+
+OUTPUT - Return ONLY this JSON, no other text:
+{"tuition_amount":"$XX,XXX total","tuition_period":"full program","academic_year":"2024-2025","cost_per_credit":"$X,XXX","total_credits":"XX","program_length":"X years","actual_program_name":"name","is_stem":false,"additional_fees":null,"remarks":null,"status":"Success","raw_content":"quote from .edu site"}
+  `;
+
+  const response = await withRetry(
+    () => ai.models.generateContent({
+      model: GEMINI_CONFIG.MODEL,
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }]
+      }
+    }),
+    `extract:${school}`
+  );
+
+  // Log response structure for debugging
+  logger.debug(`Raw response structure for extraction`, {
+    hasText: !!response.text,
+    textLength: response.text?.length || 0,
+    hasCandidates: !!response.candidates,
+    candidateCount: response.candidates?.length || 0,
+    firstCandidateKeys: Object.keys(response.candidates?.[0] || {}),
+    hasGroundingMetadata: !!response.candidates?.[0]?.groundingMetadata,
+    groundingMetadataKeys: Object.keys(response.candidates?.[0]?.groundingMetadata || {})
+  });
+
+  const parsedData = safeParseJSON(response.text, `extract:${school}:${program}`);
+
+  if (!parsedData) {
+    throw new Error('Failed to parse extraction response as JSON');
+  }
+
+  return {
+    data: parsedData,
+    response: response
+  };
+}
+
 // --- TUITION EXTRACTION ENDPOINT ---
 router.post('/extract', validateExtraction, async (req, res) => {
   try {
     const { school, program } = req.body;
-    console.log(`[Extraction] Starting extraction for: ${school} - ${program}`);
+    logger.info(`Starting extraction for: ${school} - ${program}`);
 
     const ai = getClient();
 
-    // Simplified prompt (hybrid: old structure + new improvements)
-    const prompt = `
-      Act as a strict tuition data extraction agent.
-
-      Target: "${school}" "${program}"
-
-      CRITICAL RULES:
-      1. SOURCE VERIFICATION: You must ONLY extract data from the OFFICIAL university or business school website (e.g., domains ending in .edu or the official school domain). Do NOT use data from third-party aggregators, news sites, rankings (like US News), or blogs.
-      2. MULTI-SOURCE VALIDATION: Attempt to find up to 2 distinct official pages to cross-reference the data (e.g., The "Tuition & Fees" Bursar page AND the "Program Admissions" page).
-      3. PROGRAM EXISTENCE VERIFICATION: If you cannot find evidence that the program "${program}" actually exists at "${school}", or if the search results show the program does not exist, you MUST set "status" to "Not Found", set "confidence_score" to "Low", and return null values for tuition fields. Do NOT make up or estimate data for programs that don't exist. It is better to return "Not Found" than to provide incorrect data.
-      4. IN-STATE TUITION PREFERENCE: If the website lists both "In-State" (Resident) and "Out-of-State" (Non-Resident) tuition, ALWAYS extract and calculate costs based on the IN-STATE (Resident) rate. Put the out-of-state tuition in the "remarks" field (e.g., "Out-of-state tuition: $62,175"). If only one tuition rate is shown, use that rate.
-      5. TUITION ONLY (NO FEES): For uniform comparison across schools, calculate "calculated_total_cost" using ONLY tuition (cost_per_credit × total_credits). Do NOT include fees (technology fees, student services fees, etc.) in the total cost calculation. Put any additional fees in the "additional_fees" field separately. This ensures all schools are compared on tuition alone.
-      6. CONFIDENCE SCORING: If you CANNOT find the "total_credits" (number of credits required for the program) in the text, you MUST set "confidence_score" to "Low". If you are uncertain about the program's existence or the data quality, also set "confidence_score" to "Low".
-      7. STATUS: If you cannot find the data on the official website OR if the program does not appear to exist, set "status" to "Not Found".
-      8. PROGRAM NAME: Extract the EXACT official program name as it appears on the school's website (e.g., "Master of Business Administration", "MBA in Finance", "Executive MBA"). If the program doesn't exist, set this to null.
-      9. STEM DESIGNATION: Determine if the program is STEM-designated. Look for mentions of "STEM", "STEM-designated", "STEM OPT", "STEM-eligible", or mentions of STEM CIP codes (11.xxxx, 14.xxxx, 27.xxxx, 52.1301, etc.). If explicitly stated as STEM, set is_stem to true. If not explicitly stated, set is_stem to false.
-
-      Task:
-      Search for the official tuition and fees for the target program for the latest available academic year (2024-2025 or 2025-2026).
-
-      Output Requirement:
-      Return ONLY a valid JSON object.
-      Do not include markdown formatting (like \`\`\`json).
-
-      JSON Schema:
-      {
-        "stated_tuition": "string or null - The EXACT in-state tuition as stated on website (e.g., '$1,850 per credit', '$75,000 total')",
-        "tuition_period": "string (e.g. per year, per semester, per credit, full program)",
-        "academic_year": "string (e.g. 2025-2026)",
-        "cost_per_credit": "string or null (e.g. $1,200/credit) - IN-STATE rate if both shown",
-        "total_credits": "string or null (e.g. 30 credits)",
-        "calculated_total_cost": "string or null - cost_per_credit × total_credits if both found (e.g., '$99,900'). IMPORTANT: Use TUITION ONLY, do NOT include fees in this calculation.",
-        "program_length": "string or null (e.g. 18 months, 2 years)",
-        "actual_program_name": "string or null (The EXACT official program name as displayed on the school website)",
-        "is_stem": "boolean - true if explicitly stated as STEM-designated, false otherwise",
-        "additional_fees": "string or null (Any additional mandatory fees mentioned)",
-        "remarks": "string or null (Out-of-state tuition if different, tuition freezes, payment plans, or specific disclaimers found)",
-        "confidence_score": "High" | "Medium" | "Low",
-        "status": "Success" | "Not Found",
-        "raw_content": "string (A brief summary of the text found on the OFFICIAL page containing the price)"
-      }
-    `;
-
-    console.log(`[Extraction] Calling Gemini API with Google Search...`);
-    
-    // Execute with retry logic for transient failures
-    const response = await withRetry(
-      () => ai.models.generateContent({
-        model: GEMINI_CONFIG.MODEL,
-        contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }]
-        }
-      }),
-      `extraction:${school}`
-    );
-    
-    console.log(`[Extraction] Gemini API response received`);
-
-    let data;
-    let jsonStr = response.text || '{}';
-    
-    // Extract JSON from response (may contain markdown or extra text)
-    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      jsonStr = jsonMatch[0];
-    } else {
-      // Fallback cleanup if regex fails but backticks exist
-      if (jsonStr.includes('```')) {
-        jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '');
-      }
-    }
-    jsonStr = jsonStr.trim();
-    
+    // Single extraction call for all program information
+    let extractionResult;
     try {
-      data = JSON.parse(jsonStr);
-      console.log(`[Extraction] Parsed JSON response successfully`);
-    } catch (e) {
-      logger.warn('JSON Parse Failed, falling back to raw text', { jsonStr });
-      console.error('[Extraction] JSON parsing failed:', e.message);
-      console.error('[Extraction] Raw response:', jsonStr.substring(0, 500));
+      extractionResult = await extractProgramInfo(ai, school, program);
+    } catch (error) {
+      logger.error('Extraction failed', error);
       return res.status(200).json({
         status: 'Failed',
-        raw_content: `Failed to parse AI response. Raw output: ${jsonStr.substring(0, 500)}`
+        raw_content: `Failed to extract data: ${error.message}`
+      });
+    }
+
+    const extractedData = extractionResult.data;
+
+    // If program not found, return early
+    if (extractedData.status === 'Not Found') {
+      return res.json({
+        tuition_amount: null,
+        tuition_period: 'N/A',
+        academic_year: '2025-2026',
+        cost_per_credit: null,
+        total_credits: null,
+        program_length: null,
+        actual_program_name: null,
+        is_stem: false,
+        additional_fees: null,
+        remarks: null,
+        confidence_score: 'Low',
+        status: 'Not Found',
+        source_url: `https://www.google.com/search?q=${encodeURIComponent(school + ' ' + program + ' tuition')}`,
+        validated_sources: [],
+        raw_content: 'Program not found at this school.'
       });
     }
 
     // --- Source URL Logic ---
-    // Priority: Grounding Metadata (Real Search Results) > AI JSON Output (Potential Hallucination)
-
     let validatedSources = [];
     let primarySourceUrl = '';
 
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    const supportingChunks = response.candidates?.[0]?.groundingMetadata?.groundingSupports;
+    // Get grounding chunks from extraction response
+    const response = extractionResult.response;
+
+    // Debug: Log full response structure to understand grounding metadata
+    logger.info(`Extraction response structure for ${school} - ${program}`, {
+      hasCandidates: !!response.candidates,
+      candidateCount: response.candidates?.length || 0,
+      hasGroundingMetadata: !!response.candidates?.[0]?.groundingMetadata,
+      groundingMetadataKeys: Object.keys(response.candidates?.[0]?.groundingMetadata || {}),
+      groundingChunksCount: response.candidates?.[0]?.groundingMetadata?.groundingChunks?.length || 0,
+      groundingSupportsCount: response.candidates?.[0]?.groundingMetadata?.groundingSupports?.length || 0
+    });
+
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    const supportingChunks = response.candidates?.[0]?.groundingMetadata?.groundingSupports || [];
 
     if (groundingChunks && groundingChunks.length > 0) {
-        console.log(`[Extraction] Found ${groundingChunks.length} grounding chunks`);
-        
+        logger.info(`Grounding sources for ${school} - ${program}`, {
+          sources: groundingChunks
+            .filter(c => c.web?.uri)
+            .map(c => ({ title: c.web?.title || '', url: c.web?.uri }))
+        });
+        logger.info(`Grounding snippets for ${school} - ${program}`, {
+          snippets: groundingChunks
+            .filter(c => c.segment?.text || c.web?.text)
+            .map(c => ({
+              url: c.web?.uri || '',
+              text: (c.segment?.text || c.web?.text || '').trim().substring(0, 500)
+            }))
+        });
+
+        // Create a map of original groundingChunks indices for proper lookup
+        const groundingChunkIndexMap = new Map();
+        groundingChunks.forEach((chunk, originalIndex) => {
+            if (chunk.web?.uri) {
+                groundingChunkIndexMap.set(chunk.web.uri, originalIndex);
+            }
+        });
+
         const webChunks = groundingChunks
             .filter((c) => c.web?.uri)
-            .map((c, index) => {
+            .map((c) => {
+                // Get the original index from the full groundingChunks array
+                const originalIndex = groundingChunkIndexMap.get(c.web.uri);
+
                 // Extract actual page text content from supporting chunks
                 let rawContent = '';
-                
+
                 // Method 1: Get text from supporting chunks (actual page content)
                 if (supportingChunks && supportingChunks.length > 0) {
-                    const relevantSupports = supportingChunks.filter(s => 
-                        s.groundingChunkIndices?.includes(index)
+                    const relevantSupports = supportingChunks.filter(s =>
+                        s.groundingChunkIndices?.includes(originalIndex)
                     );
                     if (relevantSupports.length > 0) {
                         const pageText = relevantSupports
@@ -222,31 +337,32 @@ router.post('/extract', validateExtraction, async (req, res) => {
                             .filter(text => text && text.trim().length > 0)
                             .join('\n\n')
                             .trim();
-                        
+
                         if (pageText && pageText.length > 10) {
                             rawContent = pageText;
                         }
                     }
                 }
-                
+
                 // Method 2: Fallback to web chunk text if available
                 if (!rawContent && c.web?.text && c.web.text.trim().length > 10) {
                     rawContent = c.web.text.trim();
                 }
-                
+
                 // Method 3: Fallback to segment text
                 if (!rawContent && c.segment?.text && c.segment.text.trim().length > 10) {
                     rawContent = c.segment.text.trim();
                 }
-                
-                // Limit content length
-                if (rawContent.length > 10000) {
-                    rawContent = rawContent.substring(0, 10000) + '\n\n... [content truncated - showing first 10,000 characters]';
+
+                // Limit content length (reserve space for truncation message)
+                const MAX_CONTENT_LENGTH = 9950;
+                if (rawContent.length > MAX_CONTENT_LENGTH) {
+                    rawContent = rawContent.substring(0, MAX_CONTENT_LENGTH) + '\n\n... [content truncated - showing first 9,950 characters]';
                 }
-                
+
                 // Sanitize for database
                 rawContent = sanitizeForDatabase(rawContent);
-                
+
                 return {
                     title: c.web.title || 'Official Source',
                     url: c.web.uri,
@@ -254,7 +370,7 @@ router.post('/extract', validateExtraction, async (req, res) => {
                 };
             });
 
-        // Simple deduplication (like old version)
+        // Simple deduplication
         const uniqueUrls = new Set();
         validatedSources = webChunks.filter((item) => {
             if (uniqueUrls.has(item.url)) return false;
@@ -262,67 +378,68 @@ router.post('/extract', validateExtraction, async (req, res) => {
             return true;
         }).slice(0, 3); // Keep top 3 actual sources
         
-        console.log(`[Extraction] Final validated sources: ${validatedSources.length}`);
-    }
-
-    // If grounding failed to provide sources (unlikely with search tool), fallback to JSON
-    if (validatedSources.length === 0 && data.validated_sources && Array.isArray(data.validated_sources)) {
-        validatedSources = data.validated_sources;
+        logger.info(`Validated sources for ${school} - ${program}`, {
+          sources: validatedSources.map(s => ({ title: s.title, url: s.url }))
+        });
+    } else {
+        logger.warn(`No grounding chunks returned from Google Search for: ${school} - ${program}`);
     }
 
     // Set primary source
     if (validatedSources.length > 0) {
         primarySourceUrl = validatedSources[0].url;
     } else {
-        primarySourceUrl = 'https://google.com'; // Fallback if absolutely nothing found
+        // Better fallback: construct a search URL with school/program context
+        primarySourceUrl = `https://www.google.com/search?q=${encodeURIComponent(school + ' ' + program + ' tuition')}`;
+        logger.warn(`Using fallback search URL for: ${school} - ${program}`, { url: primarySourceUrl });
     }
 
-    // Simple confidence scoring (like old version)
-    let confidenceScore = data.confidence_score || 'Medium';
-    if (!data.total_credits) {
+    // Confidence scoring: prioritize "Not Found" status, then check data completeness
+    let confidenceScore = 'Medium';
+    if (extractedData.status === 'Not Found') {
+        confidenceScore = 'Low';
+    } else if (extractedData.tuition_amount && extractedData.cost_per_credit && extractedData.total_credits) {
+        confidenceScore = 'High';
+    } else if (!extractedData.tuition_amount) {
         confidenceScore = 'Low';
     }
 
-    // Determine the tuition_amount field:
-    // If we have calculated_total_cost, use that; otherwise use stated_tuition
-    let tuitionAmount = data.calculated_total_cost || data.stated_tuition || data.tuition_amount || null;
-    let tuitionPeriod = data.tuition_period || 'N/A';
-    
-    // If we calculated the total, update the period
-    if (data.calculated_total_cost && data.stated_tuition) {
-        tuitionPeriod = 'full program (calculated)';
-    }
+    // Use the tuition amount exactly as found by the LLM
+    let tuitionAmount = extractedData.tuition_amount || null;
+    let tuitionPeriod = extractedData.tuition_period || 'N/A';
 
     // Sanitize raw_content for database storage
-    const sanitizedRawContent = sanitizeForDatabase(data.raw_content) || 'No content summary provided.';
+    const sanitizedRawContent = sanitizeForDatabase(extractedData.raw_content) || 'No content summary provided.';
 
     const result = {
-      tuition_amount: tuitionAmount,
-      stated_tuition: data.stated_tuition || null, // Original value from website
+      tuition_amount: formatCurrency(tuitionAmount),
       tuition_period: tuitionPeriod,
-      academic_year: data.academic_year || '2025-2026',
-      cost_per_credit: data.cost_per_credit || null,
-      total_credits: data.total_credits || null,
-      calculated_total_cost: data.calculated_total_cost || null,
-      program_length: data.program_length || null,
-      actual_program_name: data.actual_program_name || null,
-      is_stem: data.is_stem === true ? true : false, // Default to false if not explicitly true
-      additional_fees: data.additional_fees || null,
-      remarks: sanitizeForDatabase(data.remarks) || null,
+      academic_year: extractedData.academic_year || '2025-2026',
+      cost_per_credit: formatCurrency(extractedData.cost_per_credit) || null,
+      total_credits: extractedData.total_credits || null,
+      program_length: extractedData.program_length || null,
+      actual_program_name: extractedData.actual_program_name || null,
+      is_stem: extractedData.is_stem === true ? true : false, // Default to false if not explicitly true
+      additional_fees: formatCurrency(extractedData.additional_fees) || null,
+      remarks: sanitizeForDatabase(extractedData.remarks) || null,
       confidence_score: confidenceScore,
-      status: data.status === 'Not Found' ? 'Not Found' : 'Success',
+      status: extractedData.status === 'Not Found' ? 'Not Found' : 'Success',
       source_url: primarySourceUrl,
       validated_sources: validatedSources,
       raw_content: sanitizedRawContent
     };
 
-    console.log(`[Extraction] Success! Tuition: ${result.tuition_amount}, Stated: ${result.stated_tuition}, Program: ${result.actual_program_name}, STEM: ${result.is_stem}, Confidence: ${result.confidence_score}, Status: ${result.status}`);
+    logger.info(`Extraction success for: ${school} - ${program}`, {
+      tuition: result.tuition_amount,
+      program: result.actual_program_name,
+      stem: result.is_stem,
+      confidence: result.confidence_score,
+      status: result.status
+    });
     res.json(result);
 
   } catch (error) {
-    logger.error('Extraction Error', error);
-    console.error('[Extraction] Error:', error.message);
-    console.error('[Extraction] Stack:', error.stack);
+    logger.error('Extraction Error', error, { school, program });
     res.status(500).json({
       status: 'Failed',
       raw_content: 'Agent failed to retrieve data due to system error.',

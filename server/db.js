@@ -200,6 +200,28 @@ export async function initializeDatabase() {
       logger.debug('Migration: is_stem column already exists');
     }
 
+    // Add updated_at column for audit trail (migration)
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NULL
+      `;
+      logger.info('Migration: updated_at column added');
+    } catch (error) {
+      logger.debug('Migration: updated_at column already exists');
+    }
+
+    // Create index for updated_at sorting (audit trail queries)
+    try {
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_results_updated_at
+        ON extraction_results(project_id, updated_at DESC)
+      `;
+      logger.info('Index: idx_results_updated_at created');
+    } catch (error) {
+      logger.debug('Index: idx_results_updated_at already exists');
+    }
+
     logger.info('Database schema initialized successfully');
   } catch (error) {
     logger.error('Database initialization error', error);

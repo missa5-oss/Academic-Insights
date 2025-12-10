@@ -229,6 +229,25 @@ export const AuditModal: React.FC<AuditModalProps> = ({ isOpen, onClose, data })
              )}
 
              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 mt-6">Detailed Metadata</h4>
+
+             {/* Extraction Timestamps */}
+             <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                   <div>
+                      <span className="text-slate-600 font-medium">Extracted At:</span>
+                      <p className="text-slate-900 font-mono mt-1">
+                        {data.extracted_at ? new Date(data.extracted_at).toLocaleString() : 'N/A'}
+                      </p>
+                   </div>
+                   <div>
+                      <span className="text-slate-600 font-medium">Last Updated:</span>
+                      <p className="text-slate-900 font-mono mt-1">
+                        {data.updated_at ? new Date(data.updated_at).toLocaleString() : 'Not updated'}
+                      </p>
+                   </div>
+                </div>
+             </div>
+
              <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                    <div className="flex items-center justify-between mb-2">

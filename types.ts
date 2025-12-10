@@ -85,6 +85,7 @@ export interface ExtractionResult {
   // Historical tracking
   extraction_version: number; // Version number for tracking price changes over time
   extracted_at: string; // ISO timestamp of when this version was extracted
+  updated_at?: string; // ISO timestamp of when this result was last updated (for audit trail)
 
   // Additional audit fields
   actual_program_name?: string | null; // Official program name as displayed on school website

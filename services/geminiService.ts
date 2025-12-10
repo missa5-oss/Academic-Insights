@@ -229,7 +229,7 @@ export const simulateExtraction = async (school: string, program: string): Promi
       stated_tuition: data.stated_tuition || null,
       tuition_period: data.tuition_period || "N/A",
       academic_year: data.academic_year || "2025-2026",
-      
+
       // Detailed metadata
       cost_per_credit: data.cost_per_credit || null,
       total_credits: data.total_credits || null,
@@ -237,21 +237,24 @@ export const simulateExtraction = async (school: string, program: string): Promi
       program_length: data.program_length || null,
       additional_fees: data.additional_fees || null,
       remarks: data.remarks || null,
-      
+
       // Program details
       actual_program_name: data.actual_program_name || null,
       is_stem: data.is_stem === true, // Default to false if not explicitly true
-      
+
       // Confidence & validation
       confidence_score: (data.confidence_score as ConfidenceScore) || ConfidenceScore.MEDIUM,
       confidence_details: data.confidence_details || undefined,
       source_validation: data.source_validation || undefined,
-      
+
       // Status & sources
       status: status,
       source_url: data.source_url,
       validated_sources: data.validated_sources || [],
-      raw_content: data.raw_content || "No content summary provided."
+      raw_content: data.raw_content || "No content summary provided.",
+
+      // Audit trail
+      updated_at: new Date().toISOString()
     };
 
     console.log(`[Frontend] Extraction completed: Status=${status}, Confidence=${result.confidence_score}, STEM=${result.is_stem}`);
