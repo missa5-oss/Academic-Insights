@@ -316,26 +316,57 @@ router.get('/:id/history', async (req, res) => {
   }
 });
 
-// GET historical trends data for line chart (all results with multiple versions)
+// GET historical trends data for line chart (aggregated by extraction date)
 router.get('/trends/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
 
-    // Get all results for this project with their versions
-    const trends = await sql`
+    // Get all results for this project, grouped by extraction date
+    const rawTrends = await sql`
       SELECT
-        school_name,
-        program_name,
+        TO_CHAR(extracted_at, 'YYYY-MM') as date,
         tuition_amount,
         extraction_version,
-        extracted_at,
-        academic_year
+        extracted_at
       FROM extraction_results
       WHERE project_id = ${projectId}
         AND status = 'Success'
         AND tuition_amount IS NOT NULL
-      ORDER BY school_name, program_name, extraction_version ASC
+      ORDER BY extracted_at ASC
     `;
+
+    if (rawTrends.length === 0) {
+      return res.json([]);
+    }
+
+    // Aggregate by date: calculate average tuition per month
+    const trendsMap = new Map();
+
+    rawTrends.forEach((result) => {
+      const date = result.date;
+      const amount = parseFloat(result.tuition_amount.replace(/[^0-9.]/g, '') || '0');
+
+      if (!trendsMap.has(date)) {
+        trendsMap.set(date, { amounts: [], count: 0 });
+      }
+
+      const trend = trendsMap.get(date);
+      if (amount > 0) {
+        trend.amounts.push(amount);
+        trend.count++;
+      }
+    });
+
+    // Convert map to array and calculate averages
+    const trends = Array.from(trendsMap.entries())
+      .map(([date, data]) => ({
+        date,
+        avgTuition: data.amounts.length > 0
+          ? Math.round(data.amounts.reduce((a, b) => a + b, 0) / data.amounts.length)
+          : 0,
+        count: data.count
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
 
     res.json(trends);
   } catch (error) {
@@ -408,6 +439,110 @@ router.post('/:id/new-version', async (req, res) => {
   } catch (error) {
     logger.error('Error creating new version', error);
     res.status(500).json({ error: 'Failed to create new version' });
+  }
+});
+
+// GET analytics data for a project (US1.1 - Statistics Cards)
+router.get('/analytics/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    // Get all successful results with tuition data
+    const results = await sql`
+      SELECT
+        school_name,
+        program_name,
+        tuition_amount,
+        status,
+        confidence_score,
+        is_stem
+      FROM extraction_results
+      WHERE project_id = ${projectId}
+        AND status = 'Success'
+        AND tuition_amount IS NOT NULL
+      ORDER BY extraction_date DESC
+    `;
+
+    if (results.length === 0) {
+      return res.json({
+        avgTuition: 0,
+        highestTuition: null,
+        lowestTuition: null,
+        totalPrograms: 0,
+        successRate: 0,
+        stemPrograms: 0,
+        nonStemPrograms: 0,
+        totalResults: 0
+      });
+    }
+
+    // Parse tuition amounts and calculate metrics
+    const tuitionValues = results
+      .map(r => {
+        const parsed = parseFloat(r.tuition_amount.replace(/[^0-9.]/g, '') || '0');
+        return { ...r, parsedAmount: parsed };
+      })
+      .filter(r => r.parsedAmount > 0);
+
+    if (tuitionValues.length === 0) {
+      return res.json({
+        avgTuition: 0,
+        highestTuition: null,
+        lowestTuition: null,
+        totalPrograms: results.length,
+        successRate: 0,
+        stemPrograms: results.filter(r => r.is_stem).length,
+        nonStemPrograms: results.filter(r => !r.is_stem).length,
+        totalResults: results.length
+      });
+    }
+
+    // Calculate statistics
+    const sum = tuitionValues.reduce((acc, r) => acc + r.parsedAmount, 0);
+    const avgTuition = Math.round(sum / tuitionValues.length);
+
+    const highest = tuitionValues.reduce((max, r) =>
+      r.parsedAmount > max.parsedAmount ? r : max
+    );
+
+    const lowest = tuitionValues.reduce((min, r) =>
+      r.parsedAmount < min.parsedAmount ? r : min
+    );
+
+    // Get total results for this project to calculate success rate
+    const [totalCount] = await sql`
+      SELECT COUNT(*) as count FROM extraction_results
+      WHERE project_id = ${projectId}
+    `;
+    const totalResults = parseInt(totalCount.count);
+    const successCount = results.length;
+    const successRate = totalResults > 0 ? Math.round((successCount / totalResults) * 100) : 0;
+
+    // Count STEM vs non-STEM
+    const stemPrograms = results.filter(r => r.is_stem).length;
+    const nonStemPrograms = results.filter(r => !r.is_stem).length;
+
+    res.json({
+      avgTuition,
+      highestTuition: {
+        amount: highest.tuition_amount,
+        school: highest.school_name,
+        program: highest.program_name
+      },
+      lowestTuition: {
+        amount: lowest.tuition_amount,
+        school: lowest.school_name,
+        program: lowest.program_name
+      },
+      totalPrograms: results.length,
+      successRate,
+      stemPrograms,
+      nonStemPrograms,
+      totalResults
+    });
+  } catch (error) {
+    logger.error('Error fetching analytics data', error);
+    res.status(500).json({ error: 'Failed to fetch analytics data' });
   }
 });
 

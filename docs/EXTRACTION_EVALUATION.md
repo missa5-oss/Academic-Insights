@@ -364,3 +364,4 @@ The extraction functionality is well-implemented with robust backend retry logic
 - [CLAUDE.md](../CLAUDE.md) - Project architecture and implementation details
 - [CHANGELOG.md](../CHANGELOG.md) - Version history
 - [AI_AGENT_COMPARISON.md](../AI_AGENT_COMPARISON.md) - AI extraction improvements
+

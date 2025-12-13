@@ -131,15 +131,15 @@ export const getCampusLocation = async (school: string, program: string): Promis
     });
 
     if (!response.ok) {
-      console.error('Location API error:', response.statusText);
+      // Location lookup failed - return null silently (non-critical feature)
       return null;
     }
 
     const data = await response.json();
     return data;
 
-  } catch (error) {
-    console.error("Maps Extraction Error:", error);
+  } catch {
+    // Network or parsing error - return null (location is optional)
     return null;
   }
 };
@@ -148,29 +148,67 @@ export const getCampusLocation = async (school: string, program: string): Promis
 // --- EXECUTIVE SUMMARY SERVICE ---
 
 /**
- * Generates an AI-powered executive summary of tuition data.
- * @param data - Array of extraction results to analyze
- * @returns A markdown-formatted summary string, or an error message if generation fails
+ * Summary metrics returned alongside the AI-generated summary
  */
-export const generateExecutiveSummary = async (data: ExtractionResult[]): Promise<string> => {
+export interface SummaryMetrics {
+  totalPrograms: number;
+  successfulExtractions: number;
+  avgTuition: number;
+  medianTuition: number;
+  minTuition: number;
+  maxTuition: number;
+  stemPrograms: number;
+  nonStemPrograms: number;
+  dataQuality: {
+    high: number;
+    medium: number;
+    low: number;
+  };
+}
+
+/**
+ * Response from the executive summary API
+ */
+export interface SummaryResponse {
+  summary: string;
+  metrics?: SummaryMetrics;
+}
+
+/**
+ * Generates an AI-powered executive summary of tuition data.
+ * Returns both the markdown summary and calculated metrics.
+ * Supports caching based on projectId and data hash.
+ * @param data - Array of extraction results to analyze
+ * @param projectId - Optional project ID for caching
+ * @param forceRefresh - Force regeneration even if cached
+ * @returns Object containing summary text and optional metrics
+ */
+export const generateExecutiveSummary = async (
+  data: ExtractionResult[],
+  projectId?: string,
+  forceRefresh?: boolean
+): Promise<SummaryResponse & { cached?: boolean; cachedAt?: string }> => {
   try {
     const response = await fetch(`${API_URL}/api/gemini/summary`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data })
+      body: JSON.stringify({ data, projectId, forceRefresh })
     });
 
     if (!response.ok) {
-      console.error('Summary API error:', response.statusText);
-      return "Failed to generate analysis. Please try again later.";
+      return { summary: "Failed to generate analysis. Please try again later." };
     }
 
     const result = await response.json();
-    return result.summary || "No analysis generated.";
+    return {
+      summary: result.summary || "No analysis generated.",
+      metrics: result.metrics,
+      cached: result.cached,
+      cachedAt: result.cachedAt
+    };
 
-  } catch (error) {
-    console.error("Gemini API Error:", error);
-    return "Failed to generate analysis. Please try again later.";
+  } catch {
+    return { summary: "Failed to generate analysis. Please try again later." };
   }
 };
 
@@ -185,7 +223,6 @@ export const generateExecutiveSummary = async (data: ExtractionResult[]): Promis
  */
 export const simulateExtraction = async (school: string, program: string): Promise<Partial<ExtractionResult>> => {
   try {
-    console.log(`[Frontend] Starting extraction for: ${school} - ${program}`);
     const response = await fetch(`${API_URL}/api/gemini/extract`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -194,7 +231,6 @@ export const simulateExtraction = async (school: string, program: string): Promi
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[Frontend] Extraction API error (${response.status}):`, errorText);
       return {
         status: ExtractionStatus.FAILED,
         raw_content: `API request failed with status ${response.status}: ${errorText}`
@@ -202,13 +238,6 @@ export const simulateExtraction = async (school: string, program: string): Promi
     }
 
     const data = await response.json();
-    console.log(`[Frontend] Extraction response received:`, { 
-      status: data.status, 
-      tuition: data.tuition_amount,
-      stated_tuition: data.stated_tuition,
-      confidence: data.confidence_score,
-      sources: data.validated_sources?.length || 0 
-    });
 
     // Map server status to ExtractionStatus enum
     let status: ExtractionStatus;
@@ -219,8 +248,8 @@ export const simulateExtraction = async (school: string, program: string): Promi
     } else if (data.status === "Success") {
       status = ExtractionStatus.SUCCESS;
     } else {
-      console.warn(`[Frontend] Unknown status received: ${data.status}, defaulting to SUCCESS`);
-      status = ExtractionStatus.SUCCESS;
+      // Unknown status - default to SUCCESS if we have tuition data
+      status = data.tuition_amount ? ExtractionStatus.SUCCESS : ExtractionStatus.FAILED;
     }
 
     const result: Partial<ExtractionResult> = {
@@ -257,11 +286,9 @@ export const simulateExtraction = async (school: string, program: string): Promi
       updated_at: new Date().toISOString()
     };
 
-    console.log(`[Frontend] Extraction completed: Status=${status}, Confidence=${result.confidence_score}, STEM=${result.is_stem}`);
     return result;
 
   } catch (error) {
-    console.error("[Frontend] Extraction Error:", error);
     return {
       status: ExtractionStatus.FAILED,
       raw_content: `Agent failed to retrieve data due to system error: ${error instanceof Error ? error.message : 'Unknown error'}`

@@ -830,3 +830,205 @@ curl -X POST http://localhost:3001/api/gemini/extract \
   -H "Content-Type: application/json" \
   -d '{"school": "School Name", "program": "Program Name"}'
 ```
+
+---
+
+## Phase 3 Development: Comprehensive Roadmap (v1.1.0 → v2.0.0)
+
+**Status**: ✅ SPRINT 1 COMPLETE - v1.1.0 RELEASED
+**Date**: December 12, 2025
+**Roadmap Documents**: See `/Users/mahmoudissa/.claude/plans/`
+
+### Current Development Status
+
+A comprehensive 5-sprint development roadmap has been created to transform Academic-Insights from v1.0.0 to v2.0.0 with significant enhancements across five critical areas.
+
+#### Development Sprints
+
+| Sprint | Focus | Duration | Target Version | Status |
+|--------|-------|----------|-----------------|--------|
+| 1 | Market Analysis Enhancement | Weeks 1-2 | v1.1.0 | ✅ COMPLETE |
+| 2 | AI Features Enhancement | Weeks 3-5 | v1.2.0 | 📋 PLANNING COMPLETE |
+| 3 | Admin Observability & Monitoring | Weeks 6-8 | v1.3.0 | 📅 Ready to Plan |
+| 4 | Security Hardening | Weeks 9-11 | v2.0.0 | ⚠️ CRITICAL - Blocks Production |
+| 5 | Agentic AI Extraction Planning | Weeks 12-14 | v2.1.0+ | 📋 Design Phase |
+
+#### Roadmap Documentation
+
+Location: `/Users/mahmoudissa/.claude/plans/`
+
+**Documents**:
+- `INDEX.md` - Navigation guide and quick reference
+- `ROADMAP-SUMMARY.md` - Executive overview (20-30 min read)
+- `SECURITY-ALERT.md` - Critical vulnerabilities requiring immediate attention
+- `comprehensive-scrum-roadmap.md` - Complete detailed specifications
+- `lucky-wandering-biscuit.md` - Sprint 1 detailed plan
+- `SPRINT_1_IMPLEMENTATION.md` - Step-by-step implementation guide (in repo)
+
+#### Critical Security Alert
+
+🔴 **EXPOSED GEMINI API KEY** in `server/.env.example`
+- Requires immediate action: Revoke and regenerate API key
+- See `/Users/mahmoudissa/.claude/plans/SECURITY-ALERT.md` for full details
+
+#### Sprint 1: Market Analysis Enhancement (✅ COMPLETE - v1.1.0 RELEASED)
+
+**Goal**: Replace placeholder trend data with real database insights, add analytics cards, enable exports
+
+**User Stories** (All Complete):
+1. ✅ **US1.1**: Statistics Summary Cards - Avg/Highest/Lowest tuition, completion rate
+   - Backend `GET /api/results/analytics/:projectId` endpoint ✓
+   - StatCard component with icons and trends ✓
+   - Frontend state management and integration ✓
+
+2. ✅ **US1.2**: Real Historical Trends - Load actual version history instead of hardcoded data
+   - Enhanced `GET /api/results/trends/:projectId` with date aggregation ✓
+   - Average tuition calculation per extraction month ✓
+   - Real data displayed in line chart ✓
+
+3. ✅ **US1.3**: Additional Charts - Status distribution, STEM vs Non-STEM, Cost per credit
+   - Status Distribution donut chart ✓
+   - STEM vs Non-STEM horizontal bar chart ✓
+   - Cost per Credit top 10 analysis chart ✓
+
+4. ✅ **US1.4**: Export Capabilities - CSV and JSON data export
+   - CSV export with proper escaping and formatting ✓
+   - JSON export with full metadata and aggregated data ✓
+   - Export buttons on Market Analysis tab ✓
+
+**Key Changes Implemented**:
+- Backend: New `GET /api/results/analytics/:projectId` endpoint with comprehensive calculations
+- Backend: Enhanced `GET /api/results/trends/:projectId` with MongoDB-style aggregation
+- Frontend: StatCard component (`components/StatCard.tsx`) for metric displays
+- Frontend: Analytics data state management in ProjectDetail
+- Frontend: Real trends chart replacing hardcoded 2020-2025 placeholder data
+- UI: 3 new chart components (Status Distribution, STEM Comparison, Cost Per Credit)
+- Export: CSV and JSON data export functions with download buttons
+- Version: Updated to v1.1.0 across package.json, config files, and CHANGELOG
+
+**Deliverables**:
+- ✅ v1.1.0 release with real-time market analysis dashboard
+- ✅ No placeholder data - all charts use real extracted data
+- ✅ CSV/JSON export functionality operational
+- ✅ 6 total charts (2 original + 4 new) providing complete insights
+- ✅ Loading states and error handling for all data-driven components
+
+#### Roadmap Timeline
+
+```
+Week 1-2:   Sprint 1 (Market Analysis)
+Week 3-5:   Sprint 2 (AI Features)
+Week 6-8:   Sprint 3 (Observability)
+Week 9-11:  Sprint 4 (Security) ← REQUIRED BEFORE PRODUCTION
+Week 12-14: Sprint 5 (Agentic Planning)
+```
+
+#### Version Progression
+
+- v1.0.0 (Dec 10) - Original baseline
+- ✅ **v1.1.0 (Dec 12)** - Market Analysis enhancements (RELEASED)
+  - Real analytics dashboard with statistics cards
+  - 3 new insight charts (Status, STEM, Cost Per Credit)
+  - CSV/JSON export functionality
+  - Real trends data from database
+- v1.2.0 (Target Week 5) - AI features improvements
+- v1.3.0 (Target Week 8) - Observability & monitoring
+- v2.0.0 (Target Week 11) - Security hardened, production-ready
+- v2.1.0+ (Future) - Agentic AI extraction
+
+#### Sprint 2: AI Features Enhancement (📋 PLANNING COMPLETE)
+
+**Status**: Ready for execution
+**Goal**: Transform AI analysis from basic to sophisticated with quantitative metrics, conversation persistence, and enhanced context
+
+**User Stories**:
+1. **US2.1**: Enhanced Executive Summary - Add quantitative metrics and citations
+   - Balanced analysis: statistics + qualitative insights
+   - Stream sections progressively for better UX
+   - Cache results to avoid regeneration
+   - Include source attribution
+
+2. **US2.2**: Expanded Chat Context - Complete data field coverage
+   - Include STEM status, fees, confidence, location in chat
+   - Quick-reference summary (X successful, Y pending, etc.)
+   - Enable advanced queries (compare STEM vs non-STEM)
+
+3. **US2.3**: Chat Persistence - Save conversations to database
+   - Store conversation history permanently
+   - List past conversations with timestamps
+   - Restore full conversation history on selection
+   - Delete old conversations
+
+4. **US2.4**: Chat Citations - Reference specific schools and sources
+   - Parse and highlight citations in responses
+   - Link citations to audit modal
+   - Show confidence levels and extraction years
+
+5. **US2.5**: Summary Streaming & Caching - Progressive rendering
+   - Stream analysis sections as they're generated
+   - Cache identical analyses (24-hour TTL)
+   - Reduce cached analysis access from 5s to <100ms
+
+**Database Changes**:
+- Add `conversations` table (id, project_id, title, message_count, created_at)
+- Add `conversation_messages` table (id, conversation_id, role, content, tokens_used, created_at)
+- Add `project_summaries` table (project_id, data_hash, response, created_at)
+
+**Files to Create**:
+- `server/routes/conversations.js` - Conversation CRUD endpoints
+- `SPRINT_2_IMPLEMENTATION.md` - Detailed implementation guide
+
+**Files to Modify**:
+- `server/routes/gemini.js` - Enhanced summary, streaming, caching, context
+- `server/db.js` - New table schemas
+- `services/geminiService.ts` - Streaming support, citation extraction
+- `components/ChatAssistant.tsx` - Conversation management UI
+- `pages/ProjectDetail.tsx` - Streaming summary display
+
+**Implementation Timeline**:
+- Week 3: Database + conversation persistence
+- Week 4: Summary enhancement + streaming
+- Week 5: Citations + caching + polish
+
+**Effort**: 20-25 hours total
+
+**Next Immediate Steps**:
+1. Review `SPRINT_2_IMPLEMENTATION.md` for detailed specifications
+2. Assign team members to user stories
+3. Set up development database with new schemas
+4. Begin US2.3 (conversation persistence - foundation for others)
+5. Parallel: Refine summary prompt for US2.1
+
+---
+
+### Next Immediate Steps
+
+1. **This Sprint (Sprint 2)**:
+   - Begin implementation of AI Features Enhancement
+   - Execute user stories in priority order: US2.3 → US2.1 → US2.2 → US2.4 → US2.5
+   - Track progress with daily standups
+   - Update version to v1.2.0 when complete
+
+2. **Ongoing**:
+   - Update version number in `package.json` as sprints complete
+   - Track progress with SPRINT_*_IMPLEMENTATION.md files
+   - Update this CLAUDE.md with progress
+   - Prepare for Sprint 3 planning
+
+---
+
+### Quick Reference
+
+**Current Version**: v1.0.0 (December 10, 2025)
+**Target Version (Sprint 1)**: v1.1.0
+**Production Version (All Sprints)**: v2.0.0
+
+**Key Implementation Files for Sprint 1**:
+- `SPRINT_1_IMPLEMENTATION.md` - Detailed guide in this repo
+- `server/routes/results.js` - New/enhanced endpoints
+- `pages/ProjectDetail.tsx` - UI and state management
+- `types.ts` - New TypeScript interfaces
+
+**Roadmap Access**:
+- All plans: `/Users/mahmoudissa/.claude/plans/`
+- Start with: `INDEX.md` or `ROADMAP-SUMMARY.md`

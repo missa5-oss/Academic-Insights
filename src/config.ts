@@ -6,7 +6,7 @@
  */
 
 // Application version - keep in sync with package.json
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.4.0';
 
 // Application name
 export const APP_NAME = 'Academic-Insights';
@@ -56,7 +56,7 @@ export const USER_ROLES = {
 export const STORAGE_KEYS = {
   USER: 'user',
   THEME: 'theme',
-  SORT_PREFERENCE: 'sortPreference',
+  SORT_PREFERENCE: 'academica_sort_preference',
 } as const;
 
 // Export formats

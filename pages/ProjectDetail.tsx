@@ -7,8 +7,9 @@ import { ExtractionResult, ConfidenceScore, ExtractionStatus } from '../types';
 import { AuditModal } from '../components/AuditModal';
 import { HistoryModal } from '../components/HistoryModal';
 import { AddTargetModal, EditProjectModal } from '../components/ProjectModals';
+import { StatCard } from '../components/StatCard';
 import { generateExecutiveSummary, simulateExtraction, getCampusLocation } from '../services/geminiService';
-import { Search, RefreshCw, Bot, AlertTriangle, CheckCircle, ExternalLink, Eye, Download, Plus, Play, Clock, BarChart3, Table as TableIcon, Trash2, Pencil, Flag, Check, X, History } from 'lucide-react';
+import { Search, RefreshCw, Bot, AlertTriangle, CheckCircle, ExternalLink, Eye, Download, Plus, Play, Clock, BarChart3, Table as TableIcon, Trash2, Pencil, Flag, Check, X, History, DollarSign, Target, TrendingUp, TrendingDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart as RePieChart, Pie, Legend, LineChart, Line } from 'recharts';
 import { ChatAssistant } from '../components/ChatAssistant';
@@ -34,10 +35,42 @@ export const ProjectDetail: React.FC = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [summaryMetrics, setSummaryMetrics] = useState<{
+    totalPrograms: number;
+    successfulExtractions: number;
+    avgTuition: number;
+    medianTuition: number;
+    minTuition: number;
+    maxTuition: number;
+    stemPrograms: number;
+    nonStemPrograms: number;
+    dataQuality: { high: number; medium: number; low: number };
+  } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [processingItems, setProcessingItems] = useState<Record<string, boolean>>({});
   const [locatingItems, setLocatingItems] = useState<Record<string, boolean>>({});
+
+  // --- Analytics Data State (US1.1) ---
+  const [analyticsData, setAnalyticsData] = useState<{
+    avgTuition: number;
+    highestTuition: { amount: string; school: string; program: string } | null;
+    lowestTuition: { amount: string; school: string; program: string } | null;
+    totalPrograms: number;
+    successRate: number;
+    stemPrograms: number;
+    nonStemPrograms: number;
+    totalResults: number;
+  } | null>(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+
+  // --- Trends Data State (US1.2) ---
+  const [trendsData, setTrendsData] = useState<Array<{
+    date: string;
+    avgTuition: number;
+    count: number;
+  }> | null>(null);
+  const [isLoadingTrends, setIsLoadingTrends] = useState(false);
 
   // --- Selection State ---
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -82,18 +115,44 @@ export const ProjectDetail: React.FC = () => {
       { name: 'Low', value: filteredResults.filter(r => r.confidence_score === ConfidenceScore.LOW).length, color: '#CF4520' }, // Accent Alert
     ].filter(d => d.value > 0);
 
-    // Placeholder data for tuition trends over time
-    // In a real implementation, this would track historical tuition changes
-    const trendData = [
-      { year: '2020', avgTuition: 48000 },
-      { year: '2021', avgTuition: 49500 },
-      { year: '2022', avgTuition: 51200 },
-      { year: '2023', avgTuition: 53000 },
-      { year: '2024', avgTuition: 54800 },
-      { year: '2025', avgTuition: 56500 },
-    ];
+    // Chart data for US1.3 - Status Distribution
+    const statusData = [
+      { name: 'Success', value: filteredResults.filter(r => r.status === ExtractionStatus.SUCCESS).length, color: '#22c55e' },
+      { name: 'Pending', value: filteredResults.filter(r => r.status === ExtractionStatus.PENDING).length, color: '#f59e0b' },
+      { name: 'Not Found', value: filteredResults.filter(r => r.status === ExtractionStatus.NOT_FOUND).length, color: '#ef4444' },
+      { name: 'Failed', value: filteredResults.filter(r => r.status === ExtractionStatus.FAILED).length, color: '#6b7280' },
+    ].filter(d => d.value > 0);
 
-    return { pricing: validData, confidence: confidenceData, trends: trendData };
+    // Chart data for US1.3 - STEM vs Non-STEM
+    const stemCount = filteredResults.filter(r => r.is_stem === true).length;
+    const nonStemCount = filteredResults.filter(r => r.is_stem === false).length;
+    const stemData = [];
+    if (stemCount > 0) stemData.push({ name: 'STEM', value: stemCount, color: '#3b82f6' });
+    if (nonStemCount > 0) stemData.push({ name: 'Non-STEM', value: nonStemCount, color: '#8b5cf6' });
+
+    // Chart data for US1.3 - Cost Per Credit Analysis (top 10)
+    const costPerCreditData = filteredResults
+      .filter(r => r.cost_per_credit && r.tuition_amount)
+      .map(r => {
+        const costPerCredit = parseFloat(r.cost_per_credit?.toString() || '0');
+        return {
+          school: r.school_name.length > 20 ? r.school_name.substring(0, 20) + '...' : r.school_name,
+          program: r.program_name.length > 15 ? r.program_name.substring(0, 15) + '...' : r.program_name,
+          cost: costPerCredit
+        };
+      })
+      .filter(r => r.cost > 0)
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 10);
+
+    // Real trends data is now fetched from backend (US1.2)
+    return {
+      pricing: validData,
+      confidence: confidenceData,
+      status: statusData,
+      stem: stemData,
+      costPerCredit: costPerCreditData
+    };
   }, [filteredResults]);
 
   const handleAudit = (result: ExtractionResult) => {
@@ -101,11 +160,170 @@ export const ProjectDetail: React.FC = () => {
     setIsAuditOpen(true);
   };
 
-  const handleRunAnalysis = async () => {
+  const handleRunAnalysis = async (forceRefresh?: boolean) => {
     setIsAnalyzing(true);
-    const summary = await generateExecutiveSummary(filteredResults.filter(r => r.status === ExtractionStatus.SUCCESS));
-    setAiAnalysis(summary);
+    const response = await generateExecutiveSummary(
+      filteredResults.filter(r => r.status === ExtractionStatus.SUCCESS),
+      project?.id,
+      forceRefresh
+    );
+    setAiAnalysis(response.summary);
+    if (response.metrics) {
+      setSummaryMetrics(response.metrics);
+    }
     setIsAnalyzing(false);
+  };
+
+  // Fetch analytics data when analysis tab is viewed (US1.1)
+  const fetchAnalytics = async () => {
+    if (!project) return;
+
+    setIsLoadingAnalytics(true);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/results/analytics/${project.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAnalyticsData(data);
+      } else {
+        console.error('Failed to fetch analytics data');
+        setAnalyticsData(null);
+      }
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+      setAnalyticsData(null);
+    } finally {
+      setIsLoadingAnalytics(false);
+    }
+  };
+
+  // Fetch trends data (US1.2)
+  const fetchTrendsData = async () => {
+    if (!project) return;
+
+    setIsLoadingTrends(true);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/results/trends/${project.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setTrendsData(data);
+      } else {
+        console.error('Failed to fetch trends data');
+        setTrendsData(null);
+      }
+    } catch (error) {
+      console.error('Error fetching trends:', error);
+      setTrendsData(null);
+    } finally {
+      setIsLoadingTrends(false);
+    }
+  };
+
+  // Load analytics and trends when switching to analysis view
+  React.useEffect(() => {
+    if (viewMode === 'analysis' && project) {
+      fetchAnalytics();
+      fetchTrendsData();
+    }
+  }, [viewMode, project?.id]);
+
+  // US1.4 - Export Functions
+  const exportToCSV = () => {
+    if (filteredResults.length === 0) {
+      alert('No results to export');
+      return;
+    }
+
+    const headers = [
+      'School Name',
+      'Program Name',
+      'Tuition Amount',
+      'Status',
+      'Confidence Score',
+      'Academic Year',
+      'Cost Per Credit',
+      'Total Credits',
+      'Is STEM',
+      'Additional Fees',
+      'Extraction Date'
+    ];
+
+    const rows = filteredResults.map(r => [
+      r.school_name,
+      r.program_name,
+      r.tuition_amount || '',
+      r.status,
+      r.confidence_score,
+      r.academic_year || '',
+      r.cost_per_credit || '',
+      r.total_credits || '',
+      r.is_stem ? 'Yes' : 'No',
+      r.additional_fees || '',
+      r.extraction_date || ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => {
+        // Escape quotes and wrap in quotes if contains comma
+        const escaped = (cell?.toString() || '').replace(/"/g, '""');
+        return escaped.includes(',') || escaped.includes('"') ? `"${escaped}"` : escaped;
+      }).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${project?.name || 'analysis'}-data-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportToJSON = () => {
+    if (filteredResults.length === 0) {
+      alert('No results to export');
+      return;
+    }
+
+    const exportData = {
+      project: {
+        id: project?.id,
+        name: project?.name,
+        description: project?.description,
+        exportDate: new Date().toISOString()
+      },
+      analytics: analyticsData,
+      trends: trendsData,
+      results: filteredResults.map(r => ({
+        id: r.id,
+        schoolName: r.school_name,
+        programName: r.program_name,
+        tuitionAmount: r.tuition_amount,
+        status: r.status,
+        confidenceScore: r.confidence_score,
+        academicYear: r.academic_year,
+        costPerCredit: r.cost_per_credit,
+        totalCredits: r.total_credits,
+        isStem: r.is_stem,
+        additionalFees: r.additional_fees,
+        extractionDate: r.extraction_date
+      }))
+    };
+
+    const jsonString = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${project?.name || 'analysis'}-data-${new Date().toISOString().split('T')[0]}.json`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleRunExtraction = async (item: ExtractionResult) => {
@@ -510,6 +728,26 @@ export const ProjectDetail: React.FC = () => {
             >
                 <BarChart3 size={14} /> Market Analysis
             </button>
+
+            {/* Export buttons (US1.4) */}
+            {viewMode === 'analysis' && (
+              <div className="flex items-center gap-2 border-l border-slate-200 pl-3 ml-3">
+                <button
+                  onClick={exportToCSV}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all"
+                  title="Export results to CSV"
+                >
+                  <Download size={14} /> CSV
+                </button>
+                <button
+                  onClick={exportToJSON}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 transition-all"
+                  title="Export results to JSON"
+                >
+                  <Download size={14} /> JSON
+                </button>
+              </div>
+            )}
         </div>
       </div>
 
@@ -724,6 +962,44 @@ export const ProjectDetail: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-6 animate-fade-in-up">
+          {/* Statistics Cards Section (US1.1) */}
+          {isLoadingAnalytics ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="bg-slate-100 p-6 rounded-xl animate-pulse h-32"></div>
+              ))}
+            </div>
+          ) : analyticsData ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard
+                title="Average Tuition"
+                value={`$${analyticsData.avgTuition.toLocaleString()}`}
+                icon={<DollarSign size={20} className="text-slate-600" />}
+                subtitle={`${analyticsData.totalPrograms} programs`}
+              />
+              <StatCard
+                title="Highest Tuition"
+                value={analyticsData.highestTuition ? analyticsData.highestTuition.amount : 'N/A'}
+                subtitle={analyticsData.highestTuition ? `${analyticsData.highestTuition.school}` : 'No data'}
+                icon={<TrendingUp size={20} className="text-red-600" />}
+                trend="up"
+              />
+              <StatCard
+                title="Lowest Tuition"
+                value={analyticsData.lowestTuition ? analyticsData.lowestTuition.amount : 'N/A'}
+                subtitle={analyticsData.lowestTuition ? `${analyticsData.lowestTuition.school}` : 'No data'}
+                icon={<TrendingDown size={20} className="text-emerald-600" />}
+                trend="down"
+              />
+              <StatCard
+                title="Success Rate"
+                value={`${analyticsData.successRate}%`}
+                subtitle={`${analyticsData.totalResults} total extractions`}
+                icon={<Target size={20} className="text-blue-600" />}
+              />
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
            {/* Chart 1: Competitive Landscape */}
            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
@@ -790,48 +1066,162 @@ export const ProjectDetail: React.FC = () => {
            </div>
           </div>
 
-          {/* Chart 3: Tuition Trends Over Time */}
+          {/* Chart 3: Tuition Trends Over Time (US1.2) */}
           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-slate-900">Tuition Trends Over Time</h3>
-              <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">Placeholder Data</span>
+              {isLoadingTrends ? (
+                <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded animate-pulse">Loading...</span>
+              ) : trendsData && trendsData.length > 0 ? (
+                <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded">Real Data</span>
+              ) : (
+                <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">No Data</span>
+              )}
             </div>
             <div className="h-80">
+              {isLoadingTrends ? (
+                <div className="flex items-center justify-center h-full text-slate-400">
+                  <p>Loading trends data...</p>
+                </div>
+              ) : trendsData && trendsData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendsData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{fontSize: 12}}
+                      label={{ value: 'Extraction Date (YYYY-MM)', position: 'insideBottom', offset: -5 }}
+                    />
+                    <YAxis
+                      tick={{fontSize: 12}}
+                      label={{ value: 'Average Tuition ($)', angle: -90, position: 'insideLeft' }}
+                      tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                    />
+                    <Tooltip
+                      contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
+                      formatter={(value: any) => [`$${value.toLocaleString()}`, 'Avg. Tuition']}
+                      labelFormatter={(label) => `Date: ${label}`}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="avgTuition"
+                      stroke="#6366f1"
+                      strokeWidth={3}
+                      dot={{ fill: '#6366f1', r: 5 }}
+                      activeDot={{ r: 7 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-slate-400 italic">
+                  Run extraction to see tuition trends over time
+                </div>
+              )}
+              {trendsData && trendsData.length > 0 && (
+                <p className="text-xs text-slate-500 mt-2 text-center">
+                  Showing average tuition trends across {trendsData.length} extraction periods
+                </p>
+              )}
+            </div>
+          </div>
+
+        {/* Additional Charts Grid (US1.3) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Chart 4: Status Distribution (US1.3) */}
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <h3 className="font-semibold text-slate-900 mb-4">Extraction Status Distribution</h3>
+            {chartData.status.length > 0 ? (
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RePieChart>
+                    <Pie
+                      data={chartData.status}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {chartData.status.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                    <Legend verticalAlign="bottom" height={36}/>
+                  </RePieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-80 flex items-center justify-center text-slate-400 italic">
+                Run extraction to see status breakdown
+              </div>
+            )}
+          </div>
+
+          {/* Chart 5: STEM vs Non-STEM (US1.3) */}
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <h3 className="font-semibold text-slate-900 mb-4">STEM vs Non-STEM Programs</h3>
+            {chartData.stem.length > 0 ? (
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData.stem} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" width={80} tick={{fontSize: 11}} />
+                    <Tooltip
+                      contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
+                      formatter={(value: any) => [`${value} programs`, 'Count']}
+                    />
+                    <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]}>
+                      {chartData.stem.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-80 flex items-center justify-center text-slate-400 italic">
+                Run extraction to see STEM classification
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Cost Per Credit Chart (spans full width) (US1.3) */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <h3 className="font-semibold text-slate-900 mb-4">Cost Per Credit Analysis (Top 10)</h3>
+          {chartData.costPerCredit.length > 0 ? (
+            <div className="h-96">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData.trends} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="year"
-                    tick={{fontSize: 12}}
-                    label={{ value: 'Academic Year', position: 'insideBottom', offset: -5 }}
-                  />
+                <BarChart data={chartData.costPerCredit} layout="vertical" margin={{ top: 5, right: 30, left: 150, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                  <XAxis type="number" />
                   <YAxis
-                    tick={{fontSize: 12}}
-                    label={{ value: 'Average Tuition ($)', angle: -90, position: 'insideLeft' }}
-                    tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                    dataKey="school"
+                    type="category"
+                    width={150}
+                    tick={{fontSize: 11}}
                   />
                   <Tooltip
                     contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
-                    formatter={(value: any) => [`$${value.toLocaleString()}`, 'Avg. Tuition']}
+                    formatter={(value: any) => [`$${value.toLocaleString()}`, 'Cost per Credit']}
+                    labelFormatter={(label) => `${label}`}
                   />
-                  <Line
-                    type="monotone"
-                    dataKey="avgTuition"
-                    stroke="#6366f1"
-                    strokeWidth={3}
-                    dot={{ fill: '#6366f1', r: 5 }}
-                    activeDot={{ r: 7 }}
-                  />
-                </LineChart>
+                  <Bar dataKey="cost" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                </BarChart>
               </ResponsiveContainer>
-              <p className="text-xs text-slate-400 mt-2 text-center">
-                This is placeholder data showing hypothetical tuition trends. Historical tracking feature coming soon.
-              </p>
             </div>
-          </div>
+          ) : (
+            <div className="h-96 flex items-center justify-center text-slate-400 italic">
+              Run extraction to see cost per credit data
+            </div>
+          )}
         </div>
+      </div>
       )}
-      
+
       {/* Modals */}
       {selectedResult && (
         <AuditModal 
@@ -875,6 +1265,7 @@ export const ProjectDetail: React.FC = () => {
         isOpen={isChatOpen}
         onToggle={() => setIsChatOpen(!isChatOpen)}
         data={projectResults.filter(r => r.status === ExtractionStatus.SUCCESS)}
+        projectId={project?.id || ''}
       />
 
       {/* Confirmation Dialogs */}

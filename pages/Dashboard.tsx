@@ -1,12 +1,53 @@
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Clock, Activity, Database } from 'lucide-react';
+import { ArrowRight, Clock, Activity, Database, ArrowUpDown } from 'lucide-react';
 import { ConfidenceScore, ExtractionStatus } from '../types';
+import { STORAGE_KEYS } from '@/src/config';
+
+type SortOption = 'date-newest' | 'date-oldest' | 'name-asc' | 'name-desc' | 'status' | 'results';
 
 export const Dashboard: React.FC = () => {
   const { projects, results } = useApp();
+
+  // Sort preference with localStorage persistence
+  const [sortBy, setSortBy] = useState<SortOption>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.SORT_PREFERENCE);
+    return (saved as SortOption) || 'date-newest';
+  });
+
+  const handleSortChange = (option: SortOption) => {
+    setSortBy(option);
+    localStorage.setItem(STORAGE_KEYS.SORT_PREFERENCE, option);
+  };
+
+  // Sorted projects
+  const sortedProjects = useMemo(() => {
+    const sorted = [...projects];
+    switch (sortBy) {
+      case 'name-asc':
+        return sorted.sort((a, b) => a.name.localeCompare(b.name));
+      case 'name-desc':
+        return sorted.sort((a, b) => b.name.localeCompare(a.name));
+      case 'date-newest':
+        return sorted.sort((a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+      case 'date-oldest':
+        return sorted.sort((a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+      case 'status': {
+        const statusOrder: Record<string, number> = { 'Active': 0, 'Completed': 1, 'Idle': 2 };
+        return sorted.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+      }
+      case 'results':
+        return sorted.sort((a, b) => b.results_count - a.results_count);
+      default:
+        return sorted;
+    }
+  }, [projects, sortBy]);
 
   // Compute Stats
   const activeProjects = projects.filter(p => p.status === 'Active').length;
@@ -98,11 +139,27 @@ export const Dashboard: React.FC = () => {
       {/* Projects List */}
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-xl font-semibold text-slate-900">Recent Projects</h3>
-          <button className="text-sm text-jhu-heritage font-semibold hover:underline">View All</button>
+          <h3 className="text-xl font-semibold text-slate-900">Projects</h3>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <ArrowUpDown size={14} className="text-slate-400" />
+              <select
+                value={sortBy}
+                onChange={(e) => handleSortChange(e.target.value as SortOption)}
+                className="text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-jhu-heritage focus:border-transparent cursor-pointer"
+              >
+                <option value="date-newest">Newest First</option>
+                <option value="date-oldest">Oldest First</option>
+                <option value="name-asc">Name (A-Z)</option>
+                <option value="name-desc">Name (Z-A)</option>
+                <option value="status">Status</option>
+                <option value="results">Most Results</option>
+              </select>
+            </div>
+          </div>
         </div>
         <div className="divide-y divide-slate-100">
-          {projects.length > 0 ? projects.map((project) => (
+          {sortedProjects.length > 0 ? sortedProjects.map((project) => (
             <div key={project.id} className="p-6 hover:bg-jhu-gray transition-colors group">
               <div className="flex items-center justify-between">
                 <div>

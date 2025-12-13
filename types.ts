@@ -109,3 +109,158 @@ export interface ApiUsageMetric {
   tavily_calls: number;
   cost_estimate: number;
 }
+
+// ==========================================
+// Sprint 4: Additional Type Definitions
+// ==========================================
+
+/**
+ * Trend data for charts (US1.2)
+ */
+export interface TrendData {
+  date: string;
+  avgTuition: number;
+  count: number;
+}
+
+/**
+ * Chat message in conversation (US2.3)
+ */
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+  tokensUsed?: number;
+}
+
+/**
+ * Conversation metadata (US2.3)
+ */
+export interface Conversation {
+  id: string;
+  projectId: string;
+  title: string;
+  messageCount: number;
+  lastMessageAt: string;
+  createdAt: string;
+}
+
+/**
+ * Analytics data structure (US1.1)
+ */
+export interface AnalyticsData {
+  avgTuition: number;
+  highestTuition: {
+    amount: string;
+    school: string;
+    program: string;
+  } | null;
+  lowestTuition: {
+    amount: string;
+    school: string;
+    program: string;
+  } | null;
+  totalPrograms: number;
+  successRate: number;
+  stemPrograms: number;
+  nonStemPrograms: number;
+  totalResults: number;
+}
+
+/**
+ * Health check response (US3.3)
+ */
+export interface HealthCheckResponse {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  timestamp: string;
+  version: string;
+  uptime: number;
+  components: {
+    database: { status: string; latency?: number };
+    system: { status: string };
+  };
+  memory: {
+    total: number;
+    free: number;
+    used: number;
+    usedPercentage: number;
+  };
+  cpu: {
+    loadAverage: number[];
+    cores: number;
+  };
+}
+
+/**
+ * API log entry (US3.1)
+ */
+export interface APILogEntry {
+  id: string;
+  method: string;
+  path: string;
+  statusCode: number;
+  durationMs: number;
+  ipAddress?: string;
+  userAgent?: string;
+  errorMessage?: string;
+  createdAt: string;
+}
+
+/**
+ * Summary metrics from AI analysis (US2.1)
+ */
+export interface SummaryMetrics {
+  totalPrograms: number;
+  successfulExtractions: number;
+  avgTuition: number;
+  medianTuition: number;
+  minTuition: number;
+  maxTuition: number;
+  stemPrograms: number;
+  nonStemPrograms: number;
+  dataQuality: {
+    high: number;
+    medium: number;
+    low: number;
+  };
+}
+
+/**
+ * Database statistics (US3.4)
+ */
+export interface DatabaseStats {
+  projects: number;
+  extraction_results: number;
+  conversations: number;
+  conversation_messages: number;
+  project_summaries: number;
+  api_logs: number;
+}
+
+/**
+ * Admin metrics response (US3.4)
+ */
+export interface AdminMetrics {
+  summary: {
+    totalProjects: number;
+    totalResults: number;
+    totalConversations: number;
+  };
+  statusBreakdown: Record<string, number>;
+  confidenceBreakdown: Record<string, number>;
+  dailyExtractions: Array<{
+    date: string;
+    count: number;
+    successRate: number;
+  }>;
+  apiAnalytics: {
+    totalRequests: number;
+    avgResponseTime: number;
+    errorRate: number;
+    topEndpoints: Array<{
+      path: string;
+      count: number;
+    }>;
+  };
+}

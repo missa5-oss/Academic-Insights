@@ -1,7 +1,8 @@
 # Academic-Insights Phase 2 Scrum Plan
 
-**Version**: 1.0.0
+**Version**: 2.0.0
 **Created**: December 5, 2025
+**Last Updated**: December 12, 2025
 **Sprint Duration**: 2 weeks per sprint
 **Target Audience**: Carey Business School Internal Team
 
@@ -18,16 +19,28 @@ Phase 1 delivered a fully functional application with:
 - Data export (CSV/JSON) and backup/restore capabilities
 
 Phase 2 focuses on:
-1. **Application Versioning & Release Management**
-2. **Code Quality & Stability Improvements**
-3. **Performance Optimization**
-4. **Enhanced User Experience**
+1. **Application Versioning & Release Management** ✅ Complete
+2. **Code Quality & Stability Improvements** ✅ Complete
+3. **AI Features Enhancement** ✅ Complete
+4. **Admin Observability & Monitoring** ✅ Complete
+5. **Performance Optimization** 📋 Sprint 4 (Upcoming)
 
 ---
 
-## Audit Summary
+## Current Status (December 12, 2025)
 
-### Current State (December 2025)
+### Version Progress
+
+| Version | Sprint | Status | Release Date |
+|---------|--------|--------|--------------|
+| v1.0.0 | Phase 1 | ✅ Complete | Dec 5, 2025 |
+| v1.1.0 | Sprint 1 | ✅ Complete | Dec 12, 2025 |
+| v1.2.0 | Sprint 2 | ✅ Complete | Dec 12, 2025 |
+| v1.3.0 | Sprint 3 | ✅ Complete | Dec 12, 2025 |
+| v1.4.0 | Sprint 4 | ✅ Complete | Dec 12, 2025 |
+| v1.5.0 | Sprint 5 | 📋 Planned | TBD |
+
+### Audit Summary - Updated
 
 | Category | Status | Notes |
 |----------|--------|-------|
@@ -35,398 +48,229 @@ Phase 2 focuses on:
 | Backend | ✅ Complete | Express.js, Neon PostgreSQL |
 | AI Integration | ✅ Complete | Gemini API with grounding |
 | Authentication | ✅ Basic | localStorage-based (internal use) |
-| Testing | ❌ None | No test framework configured |
-| Versioning | ❌ None | version: 0.0.0 in package.json |
+| Testing | ✅ Partial | AppContext tests (539 lines), Vitest configured |
+| Versioning | ✅ Complete | v1.3.0 in package.json |
 | CI/CD | ❌ None | No automated pipelines |
-| Documentation | ✅ Good | CLAUDE.md comprehensive |
+| Documentation | ✅ Excellent | CLAUDE.md, CHANGELOG.md comprehensive |
+| Input Validation | ✅ Complete | Middleware with standardized errors |
+| Logging | ✅ Complete | Logger utility with env-based levels |
+| Admin Dashboard | ✅ Complete | Health checks, metrics, API logs |
+| Chat Persistence | ✅ Complete | Conversations saved to database |
 
-### Key Issues Identified
+### Key Issues - Resolution Status
 
 #### Priority 1 - Critical (Security/Stability)
-- [ ] No input validation on API endpoints
-- [ ] 45+ console.log statements in production code
-- [ ] Missing database unique constraints
-- [ ] Generic error handling without user feedback
+- [x] ~~No input validation on API endpoints~~ → `server/middleware/validation.js`
+- [x] ~~45+ console.log statements~~ → Reduced to test files only
+- [x] ~~Missing database unique constraints~~ → Added in `db.js`
+- [x] ~~Generic error handling~~ → Standardized error responses
 
 #### Priority 2 - High (Performance/Quality)
-- [ ] Hardcoded configuration values (API URLs, model names)
-- [ ] TEXT type for date fields (should be TIMESTAMP)
-- [ ] N+1 database queries in bulk operations
-- [ ] Duplicated loading states across components
+- [x] ~~Hardcoded configuration values~~ → `src/config.ts`, `server/config.js`
+- [x] ~~TEXT type for date fields~~ → Added `extracted_at`, `updated_at` TIMESTAMP
+- [ ] N+1 database queries in bulk operations → Deferred to Sprint 4
+- [ ] Duplicated loading states across components → Deferred to Sprint 4
 
 #### Priority 3 - Medium (Maintainability)
-- [ ] No test coverage
-- [ ] Duplicated utility code (CSV, API handling)
-- [ ] Missing TypeScript type definitions
-- [ ] Sparse code documentation
+- [x] ~~No test coverage~~ → AppContext.test.tsx (539 lines)
+- [ ] Duplicated utility code → Sprint 4
+- [ ] Missing TypeScript type definitions → Sprint 4
+- [x] ~~Sparse code documentation~~ → JSDoc added to services
 
 ---
 
-## Application Versioning Strategy
+## Completed Sprints
 
-### Semantic Versioning (SemVer)
-
-```
-MAJOR.MINOR.PATCH
-
-Examples:
-- 1.0.0 → Initial production release
-- 1.1.0 → New feature (backwards compatible)
-- 1.1.1 → Bug fix
-- 2.0.0 → Breaking changes
-```
-
-### Version Locations
-
-| File | Current | Target |
-|------|---------|--------|
-| `package.json` | 0.0.0 | 1.0.0 |
-| `server/package.json` | 1.0.0 | 1.0.0 |
-| UI Footer | N/A | Display version |
-| API Response Header | N/A | `X-App-Version` |
-
-### Changelog Format
-
-```markdown
-# Changelog
-
-## [1.1.0] - 2025-MM-DD
-### Added
-- Feature description
-
-### Changed
-- Change description
-
-### Fixed
-- Bug fix description
-
-### Security
-- Security update description
-```
-
-### Git Tagging Strategy
-
-```bash
-# Create release tag
-git tag -a v1.0.0 -m "Release 1.0.0: Production-ready release"
-git push origin v1.0.0
-
-# List tags
-git tag -l "v*"
-```
-
----
-
-## Sprint Backlog
-
-### Sprint 1: Foundation & Versioning (Weeks 1-2)
+### ✅ Sprint 1: Foundation & Versioning (v1.1.0)
 
 **Sprint Goal**: Establish versioning, improve code quality, add input validation
 
-#### User Stories
+| ID | Story | Points | Status |
+|----|-------|--------|--------|
+| S1-01 | Application versioning | 3 | ✅ Done |
+| S1-02 | CHANGELOG file | 2 | ✅ Done |
+| S1-03 | Version in footer | 1 | ✅ Done |
+| S1-04 | Centralized configuration | 5 | ✅ Done |
+| S1-05 | Input validation on API endpoints | 8 | ✅ Done |
+| S1-06 | Logger utility | 3 | ✅ Done |
 
-| ID | Story | Points | Priority |
-|----|-------|--------|----------|
-| S1-01 | As a developer, I want application versioning so I can track releases | 3 | P1 |
-| S1-02 | As a developer, I want a CHANGELOG file so I can document changes | 2 | P1 |
-| S1-03 | As a user, I want to see the app version in the footer | 1 | P2 |
-| S1-04 | As a developer, I want centralized configuration so hardcoded values are eliminated | 5 | P1 |
-| S1-05 | As a developer, I want input validation on all API endpoints | 8 | P1 |
-| S1-06 | As a developer, I want console.log replaced with a logger utility | 3 | P2 |
+**Bonus Deliverables (Market Analysis Enhancement)**:
+- ✅ Analytics endpoint with real statistics
+- ✅ StatCard reusable component
+- ✅ Real trends data (replaced placeholders)
+- ✅ Status distribution, STEM comparison charts
+- ✅ CSV/JSON export functions
 
-**Total Story Points**: 22
-
-#### Tasks Breakdown
-
-**S1-01: Application Versioning**
-- [ ] Update `package.json` version to `1.0.0`
-- [ ] Sync `server/package.json` version
-- [ ] Create version constant in `src/config.ts`
-- [ ] Add `X-App-Version` header to API responses
-- [ ] Create git tag for v1.0.0
-
-**S1-02: Changelog**
-- [ ] Create `CHANGELOG.md` in project root
-- [ ] Document Phase 1 features as v1.0.0 release
-- [ ] Add changelog update instructions to CLAUDE.md
-
-**S1-03: Version Display**
-- [ ] Add version to Layout.tsx footer
-- [ ] Import version from config
-
-**S1-04: Centralized Configuration**
-- [ ] Create `src/config.ts` with:
-  - API_URL
-  - APP_VERSION
-  - DEFAULT_PAGE_SIZE
-- [ ] Create `server/config.js` with:
-  - PORT
-  - GEMINI_MODEL
-  - RATE_LIMITS
-  - DEFAULT_CORS_ORIGINS
-- [ ] Update all hardcoded references
-
-**S1-05: Input Validation**
-- [ ] Add validation middleware to Express
-- [ ] Validate project name (max 255 chars)
-- [ ] Validate description (max 2000 chars)
-- [ ] Validate batch size limits (max 100)
-- [ ] Validate school/program names (max 500 chars)
-- [ ] Add database unique constraint for result versioning
-
-**S1-06: Logger Utility**
-- [ ] Create `src/utils/logger.ts`
-- [ ] Create `server/utils/logger.js`
-- [ ] Replace all console.log/error statements
-- [ ] Add conditional logging based on NODE_ENV
+**Total Points Delivered**: 22 + bonus
 
 ---
 
-### Sprint 2: Error Handling & Database (Weeks 3-4)
+### ✅ Sprint 2: AI Features Enhancement (v1.2.0)
 
-**Sprint Goal**: Implement robust error handling, optimize database operations
+**Sprint Goal**: Enhanced AI capabilities with conversation persistence
 
-#### User Stories
+| ID | Story | Points | Status |
+|----|-------|--------|--------|
+| US2.1 | Enhanced Executive Summary with metrics | 6-8 | ✅ Done |
+| US2.2 | Expanded Chat Context | 3-4 | ✅ Done |
+| US2.3 | Chat Conversation Persistence | 6-8 | ✅ Done |
+| US2.4 | Chat Response Citations | 4-5 | ✅ Done |
+| US2.5 | Summary Caching | 4-5 | ✅ Done |
+
+**Database Tables Added**:
+- `conversations` - Chat sessions per project
+- `conversation_messages` - Individual messages
+- `project_summaries` - Cached analysis with 24h TTL
+
+**Total Points Delivered**: ~25
+
+---
+
+### ✅ Sprint 3: Admin Observability & Monitoring (v1.3.0)
+
+**Sprint Goal**: Full observability for system health and debugging
+
+| ID | Story | Points | Status |
+|----|-------|--------|--------|
+| US3.1 | API Request Logging | 5 | ✅ Done |
+| US3.2 | Enhanced Admin Dashboard | 8 | ✅ Done |
+| US3.3 | Health Check Endpoints | 3 | ✅ Done |
+| US3.4 | Admin API Endpoints | 5 | ✅ Done |
+
+**Infrastructure Added**:
+- `api_logs` table for request tracking
+- `system_metrics` table for snapshots
+- API logger middleware with sanitization
+- Health probes (`/api/admin/health/live`, `/api/admin/health/ready`)
+- Metrics endpoint with 7-day analytics
+
+**Total Points Delivered**: 21
+
+---
+
+### ✅ Sprint 4: Performance & Polish (v1.4.0)
+
+**Sprint Goal**: Optimize performance, enhance UX, complete TypeScript coverage
+
+| ID | Story | Points | Status |
+|----|-------|--------|--------|
+| S4-01 | Search debouncing (300ms) | 3 | ✅ Done (already implemented) |
+| S4-02 | Project sorting with localStorage persistence | 2 | ✅ Done |
+| S4-03 | Utility extraction (CSV, date, API) | 5 | ✅ Done |
+| S4-04 | Complete TypeScript coverage | 3 | ✅ Done |
+| S4-05 | Confirmation dialogs audit | 2 | ✅ Done |
+
+**Total Points Delivered**: 15
+
+**Deliverables**:
+- ✅ Sort dropdown in Dashboard with 6 options
+- ✅ Sort preference persisted to localStorage
+- ✅ `src/utils/csv.ts` - CSV generation and parsing
+- ✅ `src/utils/date.ts` - Date formatting utilities
+- ✅ `src/utils/api.ts` - Standardized API calls
+- ✅ 12 new TypeScript interfaces in `types.ts`
+- ✅ ChatAssistant uses proper ConfirmDialog
+
+---
+
+## Upcoming Sprint
+
+### 📋 Sprint 5: Security & Advanced Features (v1.5.0)
+
+**Sprint Goal**: Security hardening, advanced search, performance monitoring
+
+**Target Start**: TBD
 
 | ID | Story | Points | Priority |
 |----|-------|--------|----------|
-| S2-01 | As a user, I want clear error messages when something fails | 5 | P1 |
-| S2-02 | As a developer, I want standardized API error responses | 3 | P1 |
-| S2-03 | As a developer, I want database date fields as TIMESTAMP | 5 | P2 |
-| S2-04 | As a developer, I want bulk operations to use batch inserts | 5 | P2 |
-| S2-05 | As a user, I want loading states to be consistent across the app | 3 | P2 |
+| S5-01 | Virtual scrolling for 500+ results | 5 | P2 |
+| S5-02 | Advanced search filters (STEM, confidence, status) | 3 | P2 |
+| S5-03 | Rate limit improvements | 3 | P3 |
+| S5-04 | Additional test coverage | 5 | P3 |
+| S5-05 | Performance monitoring dashboard | 5 | P3 |
 
 **Total Story Points**: 21
 
-#### Tasks Breakdown
+---
 
-**S2-01: User Error Feedback**
-- [ ] Add toast notification system (or use browser native)
-- [ ] Update AppContext to expose error state
-- [ ] Show user-friendly error messages for API failures
-- [ ] Add retry button for failed operations
+## Release History
 
-**S2-02: Standardized API Errors**
-- [ ] Define error response schema:
-  ```json
-  {
-    "error": true,
-    "code": "VALIDATION_ERROR",
-    "message": "Project name is required",
-    "details": {}
-  }
-  ```
-- [ ] Create error middleware in Express
-- [ ] Update all catch blocks to use standard format
-- [ ] Document error codes in CLAUDE.md
-
-**S2-03: Database Date Migration**
-- [ ] Create migration to add new TIMESTAMP columns
-- [ ] Backfill data from TEXT to TIMESTAMP
-- [ ] Update queries to use new columns
-- [ ] Drop old TEXT columns after verification
-
-**S2-04: Batch Operations**
-- [ ] Refactor bulk insert to use VALUES clause
-- [ ] Add transaction support for atomic operations
-- [ ] Implement partial failure handling
-- [ ] Add rollback on error
-
-**S2-05: Centralized Loading States**
-- [ ] Add loading state to AppContext
-- [ ] Create useLoading hook
-- [ ] Remove duplicate loading states from components
-- [ ] Standardize loading UI (spinner component)
+| Version | Date | Description |
+|---------|------|-------------|
+| 1.4.0 | Dec 12, 2025 | Sprint 4: Performance & Polish |
+| 1.3.0 | Dec 12, 2025 | Sprint 3: Admin Observability & Monitoring |
+| 1.2.0 | Dec 12, 2025 | Sprint 2: AI Features Enhancement |
+| 1.1.0 | Dec 12, 2025 | Sprint 1: Market Analysis Enhancement |
+| 1.0.0 | Dec 5, 2025 | Initial production release |
 
 ---
 
-### Sprint 3: Testing & Documentation (Weeks 5-6)
+## Technical Debt - Updated
 
-**Sprint Goal**: Add test coverage, improve documentation
+| Item | Location | Effort | Status |
+|------|----------|--------|--------|
+| ~~Console statements~~ | Multiple files | 3 pts | ✅ Resolved |
+| ~~Hardcoded URLs~~ | 3 files | 2 pts | ✅ Resolved |
+| ~~Missing unique constraint~~ | Database | 1 pt | ✅ Resolved |
+| N+1 bulk inserts | results.js | 3 pts | 📋 Sprint 4 |
+| Duplicate loading states | Components | 3 pts | 📋 Sprint 4 |
+| any[] types | 2 locations | 1 pt | 📋 Sprint 4 |
+| Utility duplication | ProjectDetail | 3 pts | 📋 Sprint 4 |
 
-#### User Stories
-
-| ID | Story | Points | Priority |
-|----|-------|--------|----------|
-| S3-01 | As a developer, I want unit tests for AppContext | 8 | P2 |
-| S3-02 | As a developer, I want API endpoint tests | 8 | P2 |
-| S3-03 | As a developer, I want JSDoc comments on exported functions | 3 | P3 |
-| S3-04 | As a developer, I want a proper README with setup instructions | 2 | P3 |
-
-**Total Story Points**: 21
-
-#### Tasks Breakdown
-
-**S3-01: Frontend Unit Tests**
-- [ ] Configure Vitest for React testing
-- [ ] Write tests for AppContext methods:
-  - addProject
-  - editProject
-  - deleteProject
-  - addTargets
-  - updateResult
-- [ ] Write tests for utility functions
-- [ ] Achieve 60% coverage target
-
-**S3-02: API Tests**
-- [ ] Configure Jest for backend
-- [ ] Write tests for /api/projects endpoints
-- [ ] Write tests for /api/results endpoints
-- [ ] Write tests for validation middleware
-- [ ] Mock Gemini API calls
-
-**S3-03: Code Documentation**
-- [ ] Add JSDoc to exported functions in services/
-- [ ] Add JSDoc to AppContext methods
-- [ ] Document component props with TypeScript comments
-
-**S3-04: README Update**
-- [ ] Create comprehensive README.md
-- [ ] Add installation instructions
-- [ ] Add development workflow
-- [ ] Add deployment guide
-- [ ] Link to CLAUDE.md for architecture details
+**Remaining Technical Debt**: ~10 story points
 
 ---
 
-### Sprint 4: Performance & Polish (Weeks 7-8)
-
-**Sprint Goal**: Optimize performance, enhance UX
-
-#### User Stories
-
-| ID | Story | Points | Priority |
-|----|-------|--------|----------|
-| S4-01 | As a user, I want search to be responsive with large datasets | 3 | P2 |
-| S4-02 | As a user, I want to see my most recent projects first | 2 | P3 |
-| S4-03 | As a developer, I want extracted utility functions | 5 | P3 |
-| S4-04 | As a developer, I want complete TypeScript coverage | 3 | P3 |
-| S4-05 | As a user, I want confirmation before destructive actions | 2 | P2 |
-
-**Total Story Points**: 15
-
-#### Tasks Breakdown
-
-**S4-01: Search Optimization**
-- [ ] Add debouncing to search input (300ms)
-- [ ] Implement virtual scrolling for large result sets (>100 items)
-- [ ] Add pagination option for table view
-
-**S4-02: Project Sorting**
-- [ ] Add sort options to Dashboard (name, date, status)
-- [ ] Remember user's sort preference in localStorage
-
-**S4-03: Utility Extraction**
-- [ ] Create `src/utils/csv.ts` for CSV operations
-- [ ] Create `src/utils/date.ts` for date formatting
-- [ ] Create `src/utils/api.ts` for API call wrapper
-- [ ] Update imports across codebase
-
-**S4-04: TypeScript Completion**
-- [ ] Define TrendData type
-- [ ] Define ChatMessage type
-- [ ] Define all API response types
-- [ ] Remove all `any` types
-
-**S4-05: Confirmation Dialogs**
-- [ ] Review all delete operations
-- [ ] Ensure confirmation dialog for bulk deletes
-- [ ] Add confirmation for project deletion
-- [ ] Consider undo functionality for single deletes
-
----
-
-## Release Plan
-
-### v1.0.0 - Initial Production Release
-**Target Date**: End of Sprint 1
-**Contents**: Current feature set with versioning
-
-### v1.1.0 - Stability Release
-**Target Date**: End of Sprint 2
-**Contents**:
-- Input validation
-- Standardized error handling
-- Database optimizations
-- Logger utility
-
-### v1.2.0 - Quality Release
-**Target Date**: End of Sprint 3
-**Contents**:
-- Unit test coverage
-- API tests
-- Improved documentation
-
-### v1.3.0 - Polish Release
-**Target Date**: End of Sprint 4
-**Contents**:
-- Performance optimizations
-- UX improvements
-- Utility refactoring
-
----
-
-## Definition of Done
-
-A story is complete when:
-- [ ] Code is written and follows existing patterns
-- [ ] TypeScript compiles without errors
-- [ ] Manual testing completed
-- [ ] Code reviewed (self-review for single developer)
-- [ ] Documentation updated if needed
-- [ ] CHANGELOG updated
-- [ ] No console.log statements introduced
-
----
-
-## Risk Register
-
-| Risk | Impact | Likelihood | Mitigation |
-|------|--------|------------|------------|
-| Gemini API changes | High | Low | Pin API version, monitor deprecation notices |
-| Database migration data loss | High | Low | Backup before migration, test on staging |
-| Breaking changes in React 19 | Medium | Low | Lock dependency versions |
-| Team availability | Medium | Medium | Keep sprints flexible, prioritize P1 items |
-
----
-
-## Metrics & KPIs
-
-### Development Velocity
-- Story points completed per sprint
-- Bug count per release
-- Time to resolve issues
+## Metrics & KPIs - Current Status
 
 ### Code Quality
-- Test coverage percentage
-- TypeScript error count
-- Console.log count (target: 0)
+- ✅ Test coverage: AppContext (539 lines)
+- ✅ TypeScript: Compiles without errors
+- ✅ Console.log: Production code clean (test files only)
+- ✅ Validation: All API endpoints validated
+- ✅ Logging: Structured logger with env-based levels
 
-### User Experience
-- Average page load time
-- Error rate in production
-- Feature adoption (tracked via analytics if added)
-
----
-
-## Appendix A: Technical Debt Log
-
-| Item | Location | Effort | Priority |
-|------|----------|--------|----------|
-| Console statements | Multiple files | 3 pts | P1 |
-| Hardcoded URLs | 3 files | 2 pts | P1 |
-| TEXT date fields | Database | 5 pts | P2 |
-| N+1 bulk inserts | results.js | 3 pts | P2 |
-| Missing unique constraint | Database | 1 pt | P1 |
-| Duplicate loading states | Components | 3 pts | P2 |
-| any[] types | 2 locations | 1 pt | P3 |
-| Missing JSDoc | Services | 3 pts | P3 |
-
-**Total Technical Debt**: ~21 story points
+### Infrastructure
+- ✅ Version: Synced across package.json files
+- ✅ Changelog: Comprehensive with all releases
+- ✅ Config: Centralized in config.ts/config.js
+- ✅ Database: 8 tables with proper indexes
+- ✅ Admin: Full observability dashboard
 
 ---
 
-## Appendix B: File Change Impact
+## Appendix A: Database Schema (Current)
+
+```sql
+-- Core Tables
+projects                -- Research projects
+extraction_results      -- Tuition data (20+ columns)
+
+-- Sprint 2 Tables  
+conversations           -- Chat sessions
+conversation_messages   -- Chat history
+project_summaries       -- Cached AI analysis
+
+-- Sprint 3 Tables
+api_logs                -- Request tracking
+system_metrics          -- Performance snapshots
+```
+
+---
+
+## Appendix B: API Routes (Current)
+
+```
+/api/projects           -- Project CRUD
+/api/results            -- Extraction results CRUD
+/api/gemini             -- AI extraction, chat, summary
+/api/conversations      -- Chat persistence
+/api/admin              -- Health, metrics, logs
+```
+
+---
+
+## Appendix C: File Structure
 
 ### High-Impact Files (Touch Carefully)
 - `context/AppContext.tsx` - Central state management
@@ -436,14 +280,15 @@ A story is complete when:
 ### Medium-Impact Files
 - `pages/ProjectDetail.tsx` - Main feature page
 - `server/routes/results.js` - Core CRUD operations
-- `components/ProjectModals.tsx` - Data entry
+- `components/ChatAssistant.tsx` - AI chat interface
 
-### Low-Impact Files (Safe to Modify)
-- `components/Layout.tsx` - Shell/navigation
-- `pages/Login.tsx` - Authentication
-- `pages/Dashboard.tsx` - Overview page
+### Configuration Files
+- `src/config.ts` - Frontend configuration
+- `server/config.js` - Backend configuration
+- `server/middleware/validation.js` - Input validation
+- `server/utils/logger.js` - Logging utility
 
 ---
 
 *Document maintained by: Development Team*
-*Last updated: December 5, 2025*
+*Last updated: December 12, 2025*
