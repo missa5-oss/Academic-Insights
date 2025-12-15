@@ -488,7 +488,7 @@ export const AdminPanel: React.FC = () => {
       return { min: 0, max: 0, avg: 0, count: 0 };
     }
 
-    const sorted = tuitions.sort((a, b) => a - b);
+    const sorted = [...tuitions].sort((a, b) => a - b);
     const sum = tuitions.reduce((a, b) => a + b, 0);
 
     return {
