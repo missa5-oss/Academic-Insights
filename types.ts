@@ -264,3 +264,11 @@ export interface AdminMetrics {
     }>;
   };
 }
+
+/**
+ * Master data result with project name (Admin Panel)
+ * Used for consolidated view of all successful extractions
+ */
+export interface MasterDataResult extends ExtractionResult {
+  project_name: string;
+}

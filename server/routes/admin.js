@@ -459,6 +459,60 @@ router.get('/ai-usage', async (req, res) => {
   }
 });
 
+// ==========================================
+// Master Data Endpoint (All Successful Results)
+// ==========================================
+
+/**
+ * GET /api/admin/master-data
+ * Get all successful extraction results across all projects
+ * Includes project name for identification
+ */
+router.get('/master-data', async (req, res) => {
+  try {
+    const { page, limit } = req.query;
+
+    // Pagination defaults
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(500, Math.max(1, parseInt(limit) || 100));
+    const offset = (pageNum - 1) * limitNum;
+
+    // Query successful results with project names
+    const results = await sql`
+      SELECT
+        r.*,
+        p.name as project_name
+      FROM extraction_results r
+      LEFT JOIN projects p ON r.project_id = p.id
+      WHERE r.status = 'Success'
+      ORDER BY r.extraction_date DESC, r.school_name ASC
+      LIMIT ${limitNum} OFFSET ${offset}
+    `;
+
+    // Get total count for pagination
+    const [countResult] = await sql`
+      SELECT COUNT(*) as count
+      FROM extraction_results
+      WHERE status = 'Success'
+    `;
+    const totalCount = parseInt(countResult.count);
+
+    res.json({
+      data: results,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limitNum),
+        hasMore: offset + results.length < totalCount
+      }
+    });
+  } catch (error) {
+    logger.error('Failed to get master data', error);
+    res.status(500).json({ error: 'Failed to retrieve master data' });
+  }
+});
+
 /**
  * GET /api/admin/ai-costs
  * Get detailed cost breakdown

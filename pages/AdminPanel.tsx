@@ -2,8 +2,8 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell } from 'recharts';
-import { DollarSign, Server, Cpu, Database, Download, Upload, AlertCircle, Clock, CheckCircle2, AlertTriangle, Activity, Heart, RefreshCw, Loader2, FileText, TrendingUp, Zap } from 'lucide-react';
-import { ExtractionStatus, ExtractionResult } from '../types';
+import { DollarSign, Server, Cpu, Database, Download, Upload, AlertCircle, Clock, CheckCircle2, AlertTriangle, Activity, Heart, RefreshCw, Loader2, FileText, TrendingUp, Zap, Table as TableIcon, Search, BarChart3, Target } from 'lucide-react';
+import { ExtractionStatus, ExtractionResult, MasterDataResult } from '../types';
 import { API_URL, APP_VERSION } from '../src/config';
 
 // Types for backend metrics
@@ -132,6 +132,21 @@ export const AdminPanel: React.FC = () => {
   const { results, projects, restoreData } = useApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Tab state for navigation
+  const [activeTab, setActiveTab] = useState<'overview' | 'masterData'>('overview');
+
+  // Master Data state
+  const [masterData, setMasterData] = useState<MasterDataResult[]>([]);
+  const [masterDataLoading, setMasterDataLoading] = useState(false);
+  const [masterDataSearch, setMasterDataSearch] = useState('');
+  const [masterDataPagination, setMasterDataPagination] = useState({
+    page: 1,
+    limit: 50,
+    total: 0,
+    totalPages: 0,
+    hasMore: false
+  });
+
   // Backend metrics state
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
@@ -194,6 +209,178 @@ export const AdminPanel: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Build master data from local context (all successful extractions with project names)
+  const localMasterData = useMemo(() => {
+    // Create a map of project IDs to project names
+    const projectMap = new Map(projects.map(p => [p.id, p.name]));
+
+    // Filter successful results and add project names
+    return results
+      .filter(r => r.status === ExtractionStatus.SUCCESS)
+      .map(r => ({
+        ...r,
+        project_name: projectMap.get(r.project_id) || 'Unknown Project'
+      }))
+      .sort((a, b) => {
+        // Sort by extraction_date desc, then school_name asc
+        const dateCompare = (b.extraction_date || '').localeCompare(a.extraction_date || '');
+        if (dateCompare !== 0) return dateCompare;
+        return a.school_name.localeCompare(b.school_name);
+      });
+  }, [results, projects]);
+
+  // Fetch master data from API (with fallback to local data)
+  const fetchMasterData = async (page = 1) => {
+    setMasterDataLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/admin/master-data?page=${page}&limit=50`);
+      if (response.ok) {
+        const data = await response.json();
+        // If API returns data, use it
+        if (data.data && data.data.length > 0) {
+          setMasterData(data.data);
+          setMasterDataPagination(data.pagination);
+        } else {
+          // Fallback to local data if API returns empty
+          setMasterData(localMasterData as MasterDataResult[]);
+          setMasterDataPagination({
+            page: 1,
+            limit: localMasterData.length,
+            total: localMasterData.length,
+            totalPages: 1,
+            hasMore: false
+          });
+        }
+      } else {
+        // API error - use local data
+        setMasterData(localMasterData as MasterDataResult[]);
+        setMasterDataPagination({
+          page: 1,
+          limit: localMasterData.length,
+          total: localMasterData.length,
+          totalPages: 1,
+          hasMore: false
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch master data:', err);
+      // Network error - use local data
+      setMasterData(localMasterData as MasterDataResult[]);
+      setMasterDataPagination({
+        page: 1,
+        limit: localMasterData.length,
+        total: localMasterData.length,
+        totalPages: 1,
+        hasMore: false
+      });
+    } finally {
+      setMasterDataLoading(false);
+    }
+  };
+
+  // Load master data when tab changes
+  useEffect(() => {
+    if (activeTab === 'masterData') {
+      // Always refresh when switching to master data tab
+      fetchMasterData();
+    }
+  }, [activeTab]);
+
+  // Export master data to CSV
+  const exportMasterDataToCSV = () => {
+    // Use filtered data for export (respects search filter)
+    const dataToExport = filteredMasterData.length > 0 ? filteredMasterData : localMasterData;
+    if (dataToExport.length === 0) {
+      alert('No data to export');
+      return;
+    }
+
+    const headers = [
+      'Project Name',
+      'School Name',
+      'Program Name',
+      'Tuition Amount',
+      'Academic Year',
+      'Confidence Score',
+      'Cost Per Credit',
+      'Total Credits',
+      'Is STEM',
+      'Additional Fees',
+      'Extraction Date'
+    ];
+
+    const rows = dataToExport.map(r => [
+      r.project_name || '',
+      r.school_name,
+      r.program_name,
+      r.tuition_amount || '',
+      r.academic_year || '',
+      r.confidence_score,
+      r.cost_per_credit || '',
+      r.total_credits || '',
+      r.is_stem ? 'Yes' : 'No',
+      r.additional_fees || '',
+      r.extraction_date || ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => {
+        const escaped = (cell?.toString() || '').replace(/"/g, '""');
+        return escaped.includes(',') || escaped.includes('"') ? `"${escaped}"` : escaped;
+      }).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `master-tuition-data-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Export master data to JSON
+  const exportMasterDataToJSON = () => {
+    // Use filtered data for export (respects search filter)
+    const dataToExport = filteredMasterData.length > 0 ? filteredMasterData : localMasterData;
+    if (dataToExport.length === 0) {
+      alert('No data to export');
+      return;
+    }
+
+    const exportData = {
+      exportDate: new Date().toISOString(),
+      totalRecords: dataToExport.length,
+      results: dataToExport.map(r => ({
+        projectName: r.project_name,
+        schoolName: r.school_name,
+        programName: r.program_name,
+        tuitionAmount: r.tuition_amount,
+        academicYear: r.academic_year,
+        confidenceScore: r.confidence_score,
+        costPerCredit: r.cost_per_credit,
+        totalCredits: r.total_credits,
+        isStem: r.is_stem,
+        additionalFees: r.additional_fees,
+        extractionDate: r.extraction_date
+      }))
+    };
+
+    const jsonString = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `master-tuition-data-${new Date().toISOString().split('T')[0]}.json`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Calculate Real-time Usage Metrics based on Results (fallback/local stats)
   const usageStats = useMemo(() => {
     const executedResults = results.filter(
@@ -237,6 +424,91 @@ export const AdminPanel: React.FC = () => {
         totalCost,
         chartData: Array.from(last7DaysMap.values())
     };
+  }, [results]);
+
+  // Calculate project performance metrics
+  const projectMetrics = useMemo(() => {
+    return projects.map(project => {
+      const projectResults = results.filter(r => r.project_id === project.id);
+      const successCount = projectResults.filter(r => r.status === ExtractionStatus.SUCCESS).length;
+      const successRate = projectResults.length > 0 ? (successCount / projectResults.length) * 100 : 0;
+
+      return {
+        id: project.id,
+        name: project.name,
+        totalExtractions: projectResults.length,
+        successCount,
+        successRate: Math.round(successRate),
+        status: project.status
+      };
+    });
+  }, [projects, results]);
+
+  // Calculate confidence distribution
+  const confidenceDistribution = useMemo(() => {
+    const successResults = results.filter(r => r.status === ExtractionStatus.SUCCESS);
+    const high = successResults.filter(r => r.confidence_score === 'High').length;
+    const medium = successResults.filter(r => r.confidence_score === 'Medium').length;
+    const low = successResults.filter(r => r.confidence_score === 'Low').length;
+
+    return [
+      { name: 'High', value: high, fill: '#22c55e' },
+      { name: 'Medium', value: medium, fill: '#eab308' },
+      { name: 'Low', value: low, fill: '#ef4444' }
+    ];
+  }, [results]);
+
+  // Calculate top schools
+  const topSchools = useMemo(() => {
+    const schoolMap = new Map<string, number>();
+    results
+      .filter(r => r.status === ExtractionStatus.SUCCESS)
+      .forEach(r => {
+        schoolMap.set(r.school_name, (schoolMap.get(r.school_name) || 0) + 1);
+      });
+
+    return Array.from(schoolMap.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  }, [results]);
+
+  // Calculate tuition statistics
+  const tuitionStats = useMemo(() => {
+    const tuitions = results
+      .filter(r => r.status === ExtractionStatus.SUCCESS && r.tuition_amount)
+      .map(r => {
+        // Extract numeric value from tuition_amount (e.g., "$50,000" -> 50000)
+        const cleaned = r.tuition_amount?.replace(/[^0-9.-]/g, '') || '0';
+        return parseFloat(cleaned);
+      })
+      .filter(v => !isNaN(v) && v > 0);
+
+    if (tuitions.length === 0) {
+      return { min: 0, max: 0, avg: 0, count: 0 };
+    }
+
+    const sorted = tuitions.sort((a, b) => a - b);
+    const sum = tuitions.reduce((a, b) => a + b, 0);
+
+    return {
+      min: sorted[0],
+      max: sorted[sorted.length - 1],
+      avg: sum / tuitions.length,
+      count: tuitions.length
+    };
+  }, [results]);
+
+  // Calculate STEM distribution
+  const stemDistribution = useMemo(() => {
+    const successResults = results.filter(r => r.status === ExtractionStatus.SUCCESS);
+    const stem = successResults.filter(r => r.is_stem).length;
+    const nonStem = successResults.filter(r => !r.is_stem).length;
+
+    return [
+      { name: 'STEM', value: stem, fill: '#3b82f6' },
+      { name: 'Non-STEM', value: nonStem, fill: '#8b5cf6' }
+    ];
   }, [results]);
 
   const handleBackup = () => {
@@ -319,6 +591,19 @@ export const AdminPanel: React.FC = () => {
     'Pending': '#94a3b8'
   };
 
+  // Filter master data based on search term (with fallback to local data)
+  const filteredMasterData = useMemo(() => {
+    // Use masterData if available, otherwise fall back to localMasterData
+    const sourceData = masterData.length > 0 ? masterData : localMasterData;
+    if (!masterDataSearch) return sourceData as MasterDataResult[];
+    const term = masterDataSearch.toLowerCase();
+    return (sourceData as MasterDataResult[]).filter(r =>
+      r.school_name.toLowerCase().includes(term) ||
+      r.program_name.toLowerCase().includes(term) ||
+      r.project_name?.toLowerCase().includes(term)
+    );
+  }, [masterData, masterDataSearch, localMasterData]);
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -326,17 +611,48 @@ export const AdminPanel: React.FC = () => {
           <h2 className="text-4xl font-bold text-jhu-heritage">System Administration</h2>
           <p className="text-slate-600 mt-2 text-lg">Monitor API usage, system health, and database metrics.</p>
         </div>
-        <button
-          onClick={fetchAdminData}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-jhu-heritage text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-all"
-        >
-          {loading ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Tab Toggle */}
+          <div className="flex bg-slate-100 rounded-lg p-1">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                activeTab === 'overview'
+                  ? 'bg-white text-jhu-heritage shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Activity size={16} />
+              System Overview
+            </button>
+            <button
+              onClick={() => setActiveTab('masterData')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                activeTab === 'masterData'
+                  ? 'bg-white text-jhu-heritage shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <TableIcon size={16} />
+              Master Data
+            </button>
+          </div>
+
+          {/* Refresh button - only show for overview tab */}
+          {activeTab === 'overview' && (
+            <button
+              onClick={fetchAdminData}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 bg-jhu-heritage text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-all"
+            >
+              {loading ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+              Refresh
+            </button>
+          )}
+        </div>
       </div>
 
-      {error && (
+      {error && activeTab === 'overview' && (
         <div className="bg-red-50 border border-red-100 rounded-lg p-4 flex items-start gap-3">
           <AlertCircle className="text-red-600 mt-0.5 flex-shrink-0" size={18} />
           <div className="text-sm text-red-800">
@@ -346,6 +662,157 @@ export const AdminPanel: React.FC = () => {
         </div>
       )}
 
+      {/* TAB CONTENT: Master Data */}
+      {activeTab === 'masterData' && (
+        <div className="space-y-6">
+          {/* Header with controls */}
+          <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <TableIcon className="text-jhu-heritage" size={24} />
+                <div>
+                  <h3 className="text-xl font-semibold text-jhu-heritage">Master Tuition Data</h3>
+                  <p className="text-sm text-slate-500">All successful extractions across all projects</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input
+                    type="text"
+                    placeholder="Search schools, programs..."
+                    value={masterDataSearch}
+                    onChange={(e) => setMasterDataSearch(e.target.value)}
+                    className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-jhu-heritage w-64"
+                  />
+                </div>
+
+                {/* Export buttons */}
+                <button
+                  onClick={exportMasterDataToCSV}
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  <Download size={16} />
+                  CSV
+                </button>
+                <button
+                  onClick={exportMasterDataToJSON}
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  <Download size={16} />
+                  JSON
+                </button>
+                <button
+                  onClick={() => fetchMasterData(masterDataPagination.page)}
+                  disabled={masterDataLoading}
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-jhu-heritage rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors"
+                >
+                  {masterDataLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {/* Stats summary */}
+            <div className="flex items-center gap-6 text-sm text-slate-600 mb-4">
+              <span>Total Records: <strong className="text-slate-900">{masterDataPagination.total || localMasterData.length}</strong></span>
+              <span>Showing: <strong className="text-slate-900">{filteredMasterData.length}</strong></span>
+              {masterDataPagination.totalPages > 1 && (
+                <span>Page: <strong className="text-slate-900">{masterDataPagination.page} of {masterDataPagination.totalPages}</strong></span>
+              )}
+            </div>
+
+            {/* Data Table */}
+            {masterDataLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 size={32} className="animate-spin text-slate-400" />
+              </div>
+            ) : filteredMasterData.length === 0 ? (
+              <div className="text-center py-12 text-slate-500">
+                <TableIcon size={48} className="mx-auto mb-4 text-slate-300" />
+                <p>No successful extractions found</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 border-y border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-slate-700">Project</th>
+                      <th className="px-4 py-3 font-semibold text-slate-700">School</th>
+                      <th className="px-4 py-3 font-semibold text-slate-700">Program</th>
+                      <th className="px-4 py-3 font-semibold text-slate-700">Tuition</th>
+                      <th className="px-4 py-3 font-semibold text-slate-700">Academic Year</th>
+                      <th className="px-4 py-3 font-semibold text-slate-700">Confidence</th>
+                      <th className="px-4 py-3 font-semibold text-slate-700">STEM</th>
+                      <th className="px-4 py-3 font-semibold text-slate-700">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredMasterData.map((result) => (
+                      <tr key={result.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-1 bg-blue-50 text-jhu-heritage text-xs font-medium rounded">
+                            {result.project_name || 'Unknown'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-900">{result.school_name}</td>
+                        <td className="px-4 py-3 text-slate-600">{result.program_name}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-900">{result.tuition_amount || '—'}</td>
+                        <td className="px-4 py-3 text-slate-600">{result.academic_year || '—'}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            result.confidence_score === 'High' ? 'bg-green-100 text-green-800' :
+                            result.confidence_score === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-orange-100 text-orange-800'
+                          }`}>
+                            {result.confidence_score}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {result.is_stem ? (
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">STEM</span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">{result.extraction_date || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Pagination */}
+            {masterDataPagination.totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-6">
+                <button
+                  onClick={() => fetchMasterData(masterDataPagination.page - 1)}
+                  disabled={masterDataPagination.page <= 1 || masterDataLoading}
+                  className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-slate-600">
+                  Page {masterDataPagination.page} of {masterDataPagination.totalPages}
+                </span>
+                <button
+                  onClick={() => fetchMasterData(masterDataPagination.page + 1)}
+                  disabled={!masterDataPagination.hasMore || masterDataLoading}
+                  className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: System Overview */}
+      {activeTab === 'overview' && (
+      <>
       {/* System Health Section */}
       <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
         <div className="flex items-center justify-between mb-6">
@@ -501,6 +968,203 @@ export const AdminPanel: React.FC = () => {
             {aiUsage?.summary?.total_calls ? `${aiUsage.summary.total_calls} calls` : `${usageStats.totalCalls} extractions × $0.005`}
           </p>
         </div>
+      </div>
+
+      {/* Data Quality & Performance Insights */}
+      {/* Tuition Statistics Cards */}
+      {tuitionStats.count > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                <DollarSign size={20} />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 uppercase font-semibold">Avg Tuition</p>
+                <h3 className="text-xl font-bold text-slate-900">${(tuitionStats.avg / 1000).toFixed(0)}K</h3>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500">{tuitionStats.count} programs analyzed</p>
+          </div>
+
+          <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-green-100 text-green-600 rounded-lg">
+                <TrendingUp size={20} />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 uppercase font-semibold">Highest Tuition</p>
+                <h3 className="text-xl font-bold text-slate-900">${(tuitionStats.max / 1000).toFixed(0)}K</h3>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500">Maximum extracted value</p>
+          </div>
+
+          <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-orange-100 text-orange-600 rounded-lg">
+                <DollarSign size={20} />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 uppercase font-semibold">Lowest Tuition</p>
+                <h3 className="text-xl font-bold text-slate-900">${(tuitionStats.min / 1000).toFixed(0)}K</h3>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500">Minimum extracted value</p>
+          </div>
+
+          <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-purple-100 text-purple-600 rounded-lg">
+                <Target size={20} />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 uppercase font-semibold">Tuition Range</p>
+                <h3 className="text-xl font-bold text-slate-900">${((tuitionStats.max - tuitionStats.min) / 1000).toFixed(0)}K</h3>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500">Difference between min & max</p>
+          </div>
+        </div>
+      )}
+
+      {/* Project Performance Table */}
+      {projectMetrics.length > 0 && (
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3 mb-6">
+            <BarChart3 className="text-jhu-heritage" size={24} />
+            <div>
+              <h3 className="text-xl font-semibold text-jhu-heritage">Project Performance</h3>
+              <p className="text-xs text-slate-500 mt-1">Extraction success rate by project</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 border-y border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 font-semibold text-slate-700">Project</th>
+                  <th className="px-4 py-3 font-semibold text-slate-700">Total Extractions</th>
+                  <th className="px-4 py-3 font-semibold text-slate-700">Successful</th>
+                  <th className="px-4 py-3 font-semibold text-slate-700">Success Rate</th>
+                  <th className="px-4 py-3 font-semibold text-slate-700">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {projectMetrics.map((metric) => (
+                  <tr key={metric.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-slate-900">{metric.name}</td>
+                    <td className="px-4 py-3 text-slate-600">{metric.totalExtractions}</td>
+                    <td className="px-4 py-3 text-slate-600">{metric.successCount}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden max-w-xs">
+                          <div
+                            className={`h-full transition-all ${
+                              metric.successRate >= 80 ? 'bg-green-500' :
+                              metric.successRate >= 50 ? 'bg-yellow-500' :
+                              'bg-red-500'
+                            }`}
+                            style={{ width: `${metric.successRate}%` }}
+                          />
+                        </div>
+                        <span className="text-sm font-semibold text-slate-900">{metric.successRate}%</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        metric.status === 'Active' ? 'bg-green-100 text-green-800' :
+                        metric.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
+                        'bg-slate-100 text-slate-800'
+                      }`}>
+                        {metric.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Data Quality Insights Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Confidence Distribution Pie Chart */}
+        {confidenceDistribution.some(d => d.value > 0) && (
+          <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+            <h3 className="text-lg font-semibold text-slate-900 mb-6">Confidence Score Distribution</h3>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={confidenceDistribution}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={40}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    dataKey="value"
+                    nameKey="name"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {confidenceDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* STEM Distribution Pie Chart */}
+        {stemDistribution.some(d => d.value > 0) && (
+          <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+            <h3 className="text-lg font-semibold text-slate-900 mb-6">Program Type Distribution</h3>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={stemDistribution}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={40}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    dataKey="value"
+                    nameKey="name"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {stemDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* Top Schools Bar Chart */}
+        {topSchools.length > 0 && (
+          <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+            <h3 className="text-lg font-semibold text-slate-900 mb-6">Top 10 Schools by Extractions</h3>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={topSchools.sort((a, b) => a.count - b.count)} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis type="number" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                  <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11}} width={100} />
+                  <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                  <Bar dataKey="count" fill="#002D72" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* AI Usage Dashboard */}
@@ -812,6 +1476,8 @@ export const AdminPanel: React.FC = () => {
       <div className="text-center text-xs text-slate-400">
         Last refreshed: {lastRefresh.toLocaleTimeString()} • Frontend v{APP_VERSION} • Server v{health?.version || 'N/A'}
       </div>
+      </>
+      )}
     </div>
   );
 };

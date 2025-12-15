@@ -78,6 +78,8 @@ export const ProjectDetail: React.FC = () => {
   // --- Editing State ---
   const [editingTuitionId, setEditingTuitionId] = useState<string | null>(null);
   const [editingTuitionValue, setEditingTuitionValue] = useState<string>('');
+  const [editingAcademicYearId, setEditingAcademicYearId] = useState<string | null>(null);
+  const [editingAcademicYearValue, setEditingAcademicYearValue] = useState<string>('');
 
   // --- Confirmation Dialog State ---
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -547,6 +549,23 @@ export const ProjectDetail: React.FC = () => {
     setEditingTuitionValue('');
   };
 
+  // --- Academic Year Editing Handlers ---
+  const handleStartEditAcademicYear = (result: ExtractionResult) => {
+    setEditingAcademicYearId(result.id);
+    setEditingAcademicYearValue(result.academic_year || '');
+  };
+
+  const handleSaveAcademicYear = (resultId: string) => {
+    updateResult(resultId, { academic_year: editingAcademicYearValue });
+    setEditingAcademicYearId(null);
+    setEditingAcademicYearValue('');
+  };
+
+  const handleCancelEditAcademicYear = () => {
+    setEditingAcademicYearId(null);
+    setEditingAcademicYearValue('');
+  };
+
   const handleToggleFlag = (result: ExtractionResult) => {
     updateResult(result.id, { is_flagged: !result.is_flagged });
   };
@@ -768,6 +787,7 @@ export const ProjectDetail: React.FC = () => {
                   </th>
                   <th className="px-6 py-4 font-semibold text-slate-700">School / Program</th>
                   <th className="px-6 py-4 font-semibold text-slate-700">Tuition</th>
+                  <th className="px-6 py-4 font-semibold text-slate-700">Academic Year</th>
                   <th className="px-6 py-4 font-semibold text-slate-700">Confidence</th>
                   <th className="px-6 py-4 font-semibold text-slate-700 text-center w-20">Flag</th>
                   <th className="px-6 py-4 font-semibold text-slate-700 text-right">Actions</th>
@@ -857,6 +877,52 @@ export const ProjectDetail: React.FC = () => {
                           </div>
                       ) : (
                         <span className="text-slate-400 italic">Not available</span>
+                      )}
+                    </td>
+                    {/* Academic Year Cell */}
+                    <td className="px-6 py-4">
+                      {editingAcademicYearId === result.id ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={editingAcademicYearValue}
+                            onChange={(e) => setEditingAcademicYearValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveAcademicYear(result.id);
+                              if (e.key === 'Escape') handleCancelEditAcademicYear();
+                            }}
+                            className="px-2 py-1 border border-slate-300 rounded text-sm w-28 focus:outline-none focus:ring-2 focus:ring-jhu-heritage"
+                            placeholder="2024-2025"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleSaveAcademicYear(result.id)}
+                            className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                            title="Save"
+                          >
+                            <Check size={16} />
+                          </button>
+                          <button
+                            onClick={handleCancelEditAcademicYear}
+                            className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Cancel"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ) : result.status === ExtractionStatus.SUCCESS ? (
+                        <div className="flex items-center gap-2 group/academicyear">
+                          <span className="text-sm text-slate-700">{result.academic_year || '—'}</span>
+                          <button
+                            onClick={() => handleStartEditAcademicYear(result)}
+                            className="p-1 text-slate-400 hover:text-jhu-heritage hover:bg-blue-50 rounded transition-colors opacity-0 group-hover/academicyear:opacity-100"
+                            title="Edit Academic Year"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-sm">—</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
@@ -951,7 +1017,7 @@ export const ProjectDetail: React.FC = () => {
                 ))}
                 {filteredResults.length === 0 && (
                   <tr>
-                     <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                     <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
                        No results found. Add a target to get started.
                      </td>
                   </tr>
