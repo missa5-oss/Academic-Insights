@@ -671,15 +671,18 @@ router.post('/summary', validateSummary, async (req, res) => {
   try {
     const { data, projectId, forceRefresh } = req.body;
 
-    // Generate hash of data to detect changes
+    // Generate hash of data to detect changes (includes projectId for isolation)
     const dataHash = crypto
       .createHash('md5')
-      .update(JSON.stringify(data.map(r => ({
-        id: r.id,
-        tuition: r.tuition_amount,
-        status: r.status,
-        confidence: r.confidence_score
-      }))))
+      .update(JSON.stringify({
+        projectId: projectId,
+        results: data.map(r => ({
+          id: r.id,
+          tuition: r.tuition_amount,
+          status: r.status,
+          confidence: r.confidence_score
+        }))
+      }))
       .digest('hex');
 
     // Check cache if projectId provided and not forcing refresh
@@ -784,7 +787,7 @@ router.post('/summary', validateSummary, async (req, res) => {
 
     const prompt = `
       You are a strategic market analyst preparing a concise executive summary for management review.
-      Output should be clean, professional, and suitable for executive presentations.
+      Output should use markdown formatting for professional presentation with clean, readable tables.
 
       ## QUANTITATIVE METRICS
       - Total Programs Analyzed: ${metrics.totalPrograms}
@@ -800,53 +803,54 @@ router.post('/summary', validateSummary, async (req, res) => {
       ## DETAILED PROGRAM DATA
       ${dataContext}
 
-      ## INSTRUCTIONS - PROFESSIONAL DOCUMENT FORMAT
+      ## INSTRUCTIONS - EXECUTIVE SUMMARY FORMAT
 
-      Create a concise, actionable executive summary formatted for clean document reading (not markdown emphasis). Follow this structure:
+      Create a concise executive summary following this structure exactly. Use markdown formatting for tables and headers.
 
       # Executive Summary
 
       ## The Situation
-      Write 2-3 sentences explaining what was analyzed and the key market insight about program segmentation.
+      Write 2-3 sentences explaining what was analyzed and the main market insight about program segmentation.
 
       ## Market Segments
-      Organize programs into 2-4 market tiers based on tuition ranges and characteristics. For EACH segment:
+      Organize programs into 2-4 market tiers by tuition range and characteristics. For EACH segment:
 
-      **Segment Name (Tuition Range)**
-      Create a clean table with these columns:
+      ### Segment Name (Tuition Range)
+      Create a clean markdown table with these columns:
       | School | Tuition | Credits | $/Credit | Key Positioning |
 
-      Follow with a single "KEY TAKEAWAY:" sentence (1-2 sentences max) explaining competitive implications.
+      Include proper table formatting with pipe separators. After each table, add:
 
-      ## Key Metrics
-      Create a simple 3-column table:
+      **KEY TAKEAWAY:** [1-2 sentences explaining competitive implications]
+
+      ## Key Metrics at a Glance
+      Create a 3-column markdown table:
       | Metric | Value | Implication |
 
-      Include: Average Tuition, Range, Median, STEM %, Data Confidence. Keep implications brief (1 sentence each).
+      Include: Average Tuition, Tuition Range, Median Tuition, STEM %, Data Quality/Confidence. Keep implications to 1 sentence each.
 
       ## Market Themes
-      Create a table with these columns:
+      Create a markdown table with these columns:
       | Theme | Schools | Implication |
 
-      Identify 4-6 repeating patterns (tuition lock, scholarships, flexibility, STEM, specialization, etc.)
+      Identify 4-6 repeating patterns (e.g., tuition lock, automatic scholarships, program flexibility, STEM designation, specialization).
       One sentence implications only.
 
-      ## Recommendations
-      Provide 3-4 numbered recommendations focused on strategic gaps and opportunities.
-      Format: **Number. Short Title:** One sentence explanation + why it matters.
-
       ## Bottom Line
-      A single paragraph (3-4 sentences) for senior leadership with ONE strategic question.
+      Write 3-4 sentences for senior leadership summarizing key findings and end with ONE strategic question for consideration.
 
-      ## CRITICAL FORMATTING RULES
-      - NO markdown emphasis (_, **, ##) - use plain text or HTML instead
-      - NO bullet lists - use numbered lists or tables only
-      - Tables should be clean and minimal
-      - Keep language professional but concise
-      - Use specific school names and numbers in every data point
+      ## FORMATTING REQUIREMENTS
+      - Use proper markdown syntax for tables (pipe separators, headers with dashes)
+      - Use ## for section headers (they will render as HTML headers)
+      - Use ### for subsection headers (segment names)
+      - Use **bold** for emphasis (e.g., "KEY TAKEAWAY:", segment names)
+      - Create clean, well-formatted markdown tables
+      - Tables should have proper alignment for readability
+      - Use specific school names and actual numbers in all data points
       - One-sentence implications throughout
-      - Suitable for copying into a business document or slide deck
-      - Data Confidence: Always highlight as "High reliability" or "Medium reliability"
+      - Data Quality: Describe as "High reliability" or "Medium reliability"
+      - Output suitable for copying to business documents after markdown rendering
+      - NO recommendations section - focus on analysis only
     `;
 
     // Execute with retry logic for transient failures

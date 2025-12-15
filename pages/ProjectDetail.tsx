@@ -271,6 +271,15 @@ export const ProjectDetail: React.FC = () => {
     }
   }, [viewMode, project?.id]);
 
+  // Clear all analysis state when project changes (FIX: prevent cross-project persistence)
+  React.useEffect(() => {
+    setAiAnalysis(null);
+    setSummaryMetrics(null);
+    setAnalysisHistory([]);
+    setIsAnalysisExpanded(true);
+    setCopiedAnalysis(false);
+  }, [id]);
+
   // US1.4 - Export Functions
   const exportToCSV = () => {
     if (filteredResults.length === 0) {
@@ -767,10 +776,10 @@ export const ProjectDetail: React.FC = () => {
                 </button>
               </div>
 
-              {/* Analysis Content - Clean Document Style */}
-              <div className="bg-white rounded-lg p-6 text-slate-900 leading-relaxed space-y-6">
-                <div className="text-sm leading-relaxed whitespace-pre-wrap font-sans">
-                  {aiAnalysis}
+              {/* Analysis Content - Markdown Rendered */}
+              <div className="bg-white rounded-lg p-6 text-slate-900">
+                <div className="prose prose-sm prose-slate max-w-none">
+                  <ReactMarkdown>{aiAnalysis}</ReactMarkdown>
                 </div>
               </div>
 
