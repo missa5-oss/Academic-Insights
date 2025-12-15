@@ -50,9 +50,7 @@ export const validateProject = (req, res, next) => {
   if (req.method === 'POST') {
     const nameRequired = validateRequired(name, 'Project name');
     if (nameRequired) errors.push(nameRequired);
-
-    const descRequired = validateRequired(description, 'Description');
-    if (descRequired) errors.push(descRequired);
+    // Description is optional
   }
 
   // Length validation
