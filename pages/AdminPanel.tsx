@@ -458,17 +458,32 @@ export const AdminPanel: React.FC = () => {
     ];
   }, [results]);
 
+  // Helper function to truncate school names for readability
+  const truncateSchoolName = (name: string, maxLength: number = 35): string => {
+    if (name.length <= maxLength) return name;
+    return name.substring(0, maxLength - 3) + '...';
+  };
+
   // Calculate top schools
   const topSchools = useMemo(() => {
-    const schoolMap = new Map<string, number>();
+    const schoolMap = new Map<string, { displayName: string; fullName: string }>();
     results
       .filter(r => r.status === ExtractionStatus.SUCCESS)
       .forEach(r => {
-        schoolMap.set(r.school_name, (schoolMap.get(r.school_name) || 0) + 1);
+        const existing = schoolMap.get(r.school_name);
+        if (!existing) {
+          schoolMap.set(r.school_name, {
+            displayName: truncateSchoolName(r.school_name),
+            fullName: r.school_name
+          });
+        }
       });
 
     return Array.from(schoolMap.entries())
-      .map(([name, count]) => ({ name, count }))
+      .map(([fullName, { displayName }]) => {
+        const count = results.filter(r => r.status === ExtractionStatus.SUCCESS && r.school_name === fullName).length;
+        return { name: displayName, fullName, count };
+      })
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
   }, [results]);
@@ -1150,15 +1165,37 @@ export const AdminPanel: React.FC = () => {
 
         {/* Top Schools Bar Chart */}
         {topSchools.length > 0 && (
-          <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+          <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow col-span-1 lg:col-span-3">
             <h3 className="text-lg font-semibold text-slate-900 mb-6">Top 10 Schools by Extractions</h3>
-            <div className="h-72">
+            <div className="h-96">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={[...topSchools].sort((a, b) => a.count - b.count)} layout="vertical">
+                <BarChart data={[...topSchools].sort((a, b) => a.count - b.count)} layout="vertical" margin={{ left: 200 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis type="number" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
-                  <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11}} width={100} />
-                  <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                  <YAxis
+                    dataKey="name"
+                    type="category"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{fill: '#64748b', fontSize: 11}}
+                    width={200}
+                  />
+                  <Tooltip
+                    cursor={{fill: '#f1f5f9'}}
+                    contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
+                    content={({ active, payload }) => {
+                      if (active && payload && payload[0]) {
+                        const data = payload[0].payload as any;
+                        return (
+                          <div className="bg-white p-3 rounded border border-slate-200">
+                            <p className="font-semibold text-slate-900">{data.fullName}</p>
+                            <p className="text-sm text-slate-600">Extractions: {data.count}</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
                   <Bar dataKey="count" fill="#002D72" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
