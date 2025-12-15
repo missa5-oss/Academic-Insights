@@ -816,22 +816,25 @@ router.post('/summary', validateSummary, async (req, res) => {
       Organize programs into 2-4 market tiers by tuition range and characteristics. For EACH segment:
 
       ### Segment Name (Tuition Range)
-      Create a clean markdown table with these columns:
+      Create a markdown table with these columns (NO alignment colons):
       | School | Tuition | Credits | $/Credit | Key Positioning |
+      | --- | --- | --- | --- | --- |
 
-      Include proper table formatting with pipe separators. After each table, add:
+      Add rows with data. After each table, add:
 
       **KEY TAKEAWAY:** [1-2 sentences explaining competitive implications]
 
       ## Key Metrics at a Glance
-      Create a 3-column markdown table:
+      Create a markdown table with rows (NO alignment colons):
       | Metric | Value | Implication |
+      | --- | --- | --- |
 
       Include: Average Tuition, Tuition Range, Median Tuition, STEM %, Data Quality/Confidence. Keep implications to 1 sentence each.
 
       ## Market Themes
-      Create a markdown table with these columns:
+      Create a markdown table with rows (NO alignment colons):
       | Theme | Schools | Implication |
+      | --- | --- | --- |
 
       Identify 4-6 repeating patterns (e.g., tuition lock, automatic scholarships, program flexibility, STEM designation, specialization).
       One sentence implications only.
@@ -839,13 +842,29 @@ router.post('/summary', validateSummary, async (req, res) => {
       ## Bottom Line
       Write 3-4 sentences for senior leadership summarizing key findings and end with ONE strategic question for consideration.
 
-      ## FORMATTING REQUIREMENTS
-      - Use proper markdown syntax for tables (pipe separators, headers with dashes)
+      ## FORMATTING REQUIREMENTS - CRITICAL INSTRUCTIONS FOR MARKDOWN TABLES
+
+      ⚠️ CRITICAL: Your markdown tables MUST follow this EXACT format. No exceptions.
+
+      CORRECT TABLE FORMAT (use this):
+      | Column A | Column B | Column C |
+      | --- | --- | --- |
+      | data | data | data |
+
+      INCORRECT FORMATS TO AVOID (never use these):
+      ❌ WRONG: | :--- | :--- | :--- |
+      ❌ WRONG: | :---: | :---: | :---: |
+      ❌ WRONG: | ---: | ---: | ---: |
+      ❌ WRONG: | :------------ | :--------- | :---------- |
+
+      The separator row MUST be: | --- | --- | --- | (one dash between pipes, NO colons)
+
+      ADDITIONAL FORMATTING REQUIREMENTS:
+      - Use proper markdown syntax for tables (pipe separators, headers with simple dashes only)
       - Use ## for section headers (they will render as HTML headers)
       - Use ### for subsection headers (segment names)
       - Use **bold** for emphasis (e.g., "KEY TAKEAWAY:", segment names)
-      - Create clean, well-formatted markdown tables
-      - Tables should have proper alignment for readability
+      - Create clean, well-formatted markdown tables with SIMPLE SEPARATORS (just ---, no colons)
       - Use specific school names and actual numbers in all data points
       - One-sentence implications throughout
       - Data Quality: Describe as "High reliability" or "Medium reliability"
@@ -885,7 +904,15 @@ router.post('/summary', validateSummary, async (req, res) => {
       throw error;
     }
 
-    const summary = response.text || 'No analysis generated.';
+    // Helper function to sanitize markdown table alignment colons
+    const sanitizeMarkdownTables = (markdown) => {
+      // Replace table separator rows with alignment colons with simple dashes
+      // Changes | :--- | to | --- | and | :---: | to | --- | etc.
+      return markdown.replace(/\|\s*:?-+:?\s*\|/g, '| --- |')
+                     .replace(/\|\s*:?-+:?\s*$/gm, '| --- |');
+    };
+
+    const summary = sanitizeMarkdownTables(response.text || 'No analysis generated.');
 
     // Build the response object
     const responseData = {

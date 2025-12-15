@@ -271,13 +271,18 @@ export const ProjectDetail: React.FC = () => {
     }
   }, [viewMode, project?.id]);
 
-  // Clear all analysis state when project changes (FIX: prevent cross-project persistence)
+  // Clear all analysis state only when switching between DIFFERENT projects
+  const prevProjectIdRef = React.useRef<string | undefined>(undefined);
   React.useEffect(() => {
-    setAiAnalysis(null);
-    setSummaryMetrics(null);
-    setAnalysisHistory([]);
-    setIsAnalysisExpanded(true);
-    setCopiedAnalysis(false);
+    if (prevProjectIdRef.current && prevProjectIdRef.current !== id) {
+      // Only clear if we're switching to a different project
+      setAiAnalysis(null);
+      setSummaryMetrics(null);
+      setAnalysisHistory([]);
+      setIsAnalysisExpanded(true);
+      setCopiedAnalysis(false);
+    }
+    prevProjectIdRef.current = id;
   }, [id]);
 
   // US1.4 - Export Functions
