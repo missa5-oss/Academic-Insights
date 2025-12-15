@@ -1154,7 +1154,7 @@ export const AdminPanel: React.FC = () => {
             <h3 className="text-lg font-semibold text-slate-900 mb-6">Top 10 Schools by Extractions</h3>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={topSchools.sort((a, b) => a.count - b.count)} layout="vertical">
+                <BarChart data={[...topSchools].sort((a, b) => a.count - b.count)} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis type="number" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
                   <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11}} width={100} />
