@@ -784,6 +784,7 @@ router.post('/summary', validateSummary, async (req, res) => {
 
     const prompt = `
       You are a strategic market analyst preparing a concise executive summary for management review.
+      Output should be clean, professional, and suitable for executive presentations.
 
       ## QUANTITATIVE METRICS
       - Total Programs Analyzed: ${metrics.totalPrograms}
@@ -799,51 +800,53 @@ router.post('/summary', validateSummary, async (req, res) => {
       ## DETAILED PROGRAM DATA
       ${dataContext}
 
-      ## INSTRUCTIONS - EXECUTIVE FORMAT
+      ## INSTRUCTIONS - PROFESSIONAL DOCUMENT FORMAT
 
-      Create a SHORT, actionable executive summary (not a lengthy report) for management. Follow this structure exactly:
+      Create a concise, actionable executive summary formatted for clean document reading (not markdown emphasis). Follow this structure:
 
-      ### 1. THE SITUATION (1-2 sentences)
-      Brief context on what was analyzed and main insight about program segmentation.
+      # Executive Summary
 
-      ### 2. MARKET SEGMENTS (Organize by tuition tier + similar characteristics)
-      Create 2-4 market segments based on tuition ranges, program length, credits, and positioning themes.
+      ## The Situation
+      Write 2-3 sentences explaining what was analyzed and the key market insight about program segmentation.
 
-      For EACH segment, create a Markdown table with columns:
-      - School Name
-      - Tuition
-      - Credits
-      - $/Credit
-      - Notable Positioning (key differentiator: flexibility, specialization, brand, etc.)
+      ## Market Segments
+      Organize programs into 2-4 market tiers based on tuition ranges and characteristics. For EACH segment:
 
-      Add a "KEY TAKEAWAY" bullet point after each segment (1-2 sentences explaining competitive implications).
+      **Segment Name (Tuition Range)**
+      Create a clean table with these columns:
+      | School | Tuition | Credits | $/Credit | Key Positioning |
 
-      ### 3. KEY METRICS AT A GLANCE
-      Create a 2-column table showing:
-      - Metric | Value | Implication
+      Follow with a single "KEY TAKEAWAY:" sentence (1-2 sentences max) explaining competitive implications.
 
-      Include: Average Tuition, Range, Median, STEM %age, Data Confidence
+      ## Key Metrics
+      Create a simple 3-column table:
+      | Metric | Value | Implication |
 
-      ### 4. WHAT THE MARKET IS SAYING
-      Create a table with columns: Theme | Schools | Implication
+      Include: Average Tuition, Range, Median, STEM %, Data Confidence. Keep implications brief (1 sentence each).
 
-      Look for repeating patterns in remarks (e.g., "tuition lock", "automatic scholarship", "flexibility in duration", specialization, etc.)
-      Include only 4-6 most important themes observed.
+      ## Market Themes
+      Create a table with these columns:
+      | Theme | Schools | Implication |
 
-      ### 5. STRATEGIC RECOMMENDATIONS (3-4 bullet points maximum)
-      Focus on gaps/opportunities for OUR institution. Be specific and actionable.
-      Example: "STEM-Designated Program: Only 2 of ${metrics.totalPrograms} programs offer STEM. Opportunity for 40%+ premium positioning."
+      Identify 4-6 repeating patterns (tuition lock, scholarships, flexibility, STEM, specialization, etc.)
+      One sentence implications only.
 
-      ### 6. BOTTOM LINE (1 paragraph)
-      A 2-3 sentence takeaway for senior leadership. Include strategic question or decision needed.
+      ## Recommendations
+      Provide 3-4 numbered recommendations focused on strategic gaps and opportunities.
+      Format: **Number. Short Title:** One sentence explanation + why it matters.
 
-      ## FORMATTING REQUIREMENTS
-      - Use Markdown tables (not prose lists) for segments
-      - Keep each section concise (1-2 paragraphs max, except tables)
-      - Always include school names and specific numbers
-      - Highlight data quality confidence
-      - NO lengthy source URLs—use "Source: [domain]" format if needed
-      - Format as clean, professional Markdown suitable for slides/executive reading
+      ## Bottom Line
+      A single paragraph (3-4 sentences) for senior leadership with ONE strategic question.
+
+      ## CRITICAL FORMATTING RULES
+      - NO markdown emphasis (_, **, ##) - use plain text or HTML instead
+      - NO bullet lists - use numbered lists or tables only
+      - Tables should be clean and minimal
+      - Keep language professional but concise
+      - Use specific school names and numbers in every data point
+      - One-sentence implications throughout
+      - Suitable for copying into a business document or slide deck
+      - Data Confidence: Always highlight as "High reliability" or "Medium reliability"
     `;
 
     // Execute with retry logic for transient failures
