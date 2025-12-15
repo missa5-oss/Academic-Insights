@@ -1,6 +1,8 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Project, ExtractionResult, ExtractionStatus, ConfidenceScore, User } from '../types';
+import { API_URL } from '@/src/config';
+import { TrendData } from '../types';
 
 /**
  * Type definition for the App context value.
@@ -21,7 +23,7 @@ interface AppContextType {
   restoreData: (data: { projects: Project[]; results: ExtractionResult[] }) => void;
   getResultHistory: (id: string) => Promise<ExtractionResult[]>;
   createNewVersion: (id: string, newData: Partial<ExtractionResult>) => Promise<void>;
-  getTrendsData: (projectId: string) => Promise<any[]>;
+  getTrendsData: (projectId: string) => Promise<TrendData[]>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -30,9 +32,6 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const STORAGE_KEYS = {
   USER: 'academica_user_v1'
 };
-
-/** Backend API URL from environment or default to localhost */
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 /**
  * Global state provider for the application.
@@ -423,7 +422,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
    * @param projectId - Project ID to get trends for
    * @returns Array of trend data points for charting
    */
-  const getTrendsData = async (projectId: string): Promise<any[]> => {
+  const getTrendsData = async (projectId: string): Promise<TrendData[]> => {
     try {
       const response = await fetch(`${API_URL}/api/results/trends/${projectId}`);
       if (response.ok) {

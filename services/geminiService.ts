@@ -1,8 +1,15 @@
-import { ExtractionResult, ExtractionStatus, ConfidenceScore, LocationData } from "../types";
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { ExtractionResult, ExtractionStatus, ConfidenceScore, LocationData, ChatMessage } from "../types";
+import { API_URL } from "@/src/config";
 
 // --- CHAT ANALYST SERVICE ---
+
+/**
+ * Chat history entry for Gemini API format
+ */
+interface ChatHistoryEntry {
+  role: 'user' | 'model';
+  parts: Array<{ text: string }>;
+}
 
 /**
  * Chat client that communicates with the backend Gemini API.
@@ -18,7 +25,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
  */
 export class BackendChat {
   private contextData: ExtractionResult[];
-  private history: any[] = [];
+  private history: ChatHistoryEntry[] = [];
 
   /**
    * Creates a new BackendChat instance.
@@ -209,6 +216,43 @@ export const generateExecutiveSummary = async (
 
   } catch {
     return { summary: "Failed to generate analysis. Please try again later." };
+  }
+};
+
+/**
+ * Fetches analysis history for a project from the server.
+ * Useful for viewing previous analyses and comparing market positioning over time.
+ * @param projectId - The project ID to fetch history for
+ * @param limit - Maximum number of analyses to fetch (default 10)
+ * @returns Array of previous analyses with metadata
+ */
+export const fetchAnalysisHistory = async (
+  projectId: string,
+  limit: number = 10
+): Promise<Array<{
+  id: string;
+  project_id: string;
+  analysis_content: string;
+  metrics?: any;
+  data_hash: string;
+  cached: boolean;
+  created_at: string;
+}>> => {
+  try {
+    const response = await fetch(
+      `${API_URL}/api/results/analysis-history/${projectId}?limit=${limit}`,
+      { method: 'GET' }
+    );
+
+    if (!response.ok) {
+      console.warn('Failed to fetch analysis history');
+      return [];
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.warn('Error fetching analysis history:', error);
+    return [];
   }
 };
 

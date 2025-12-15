@@ -1371,7 +1371,7 @@ export const AdminPanel: React.FC = () => {
                     paddingAngle={2}
                     dataKey="count"
                     nameKey="status"
-                    label={({ status, count }) => `${status}: ${count}`}
+                    label={({ name, value }) => `${name || ''}: ${value || 0}`}
                   >
                     {metrics.statusBreakdown.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={STATUS_COLORS[entry.status] || '#94a3b8'} />

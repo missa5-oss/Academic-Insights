@@ -783,9 +783,9 @@ router.post('/summary', validateSummary, async (req, res) => {
     }).join('\n\n');
 
     const prompt = `
-      You are a strategic market analyst for an educational institution specializing in competitive positioning analysis.
+      You are a strategic market analyst preparing a concise executive summary for management review.
 
-      ## QUANTITATIVE METRICS (Include these in your analysis)
+      ## QUANTITATIVE METRICS
       - Total Programs Analyzed: ${metrics.totalPrograms}
       - Successful Data Extractions: ${metrics.successfulExtractions}
       - Average Tuition: $${metrics.avgTuition.toLocaleString()}
@@ -796,38 +796,54 @@ router.post('/summary', validateSummary, async (req, res) => {
       ${highestTuition ? `- Highest Tuition: ${highestTuition.school_name} (${highestTuition.tuition_amount})` : ''}
       ${lowestTuition ? `- Lowest Tuition: ${lowestTuition.school_name} (${lowestTuition.tuition_amount})` : ''}
 
-      ## DETAILED DATA WITH SOURCES
+      ## DETAILED PROGRAM DATA
       ${dataContext}
 
-      ## ANALYSIS REQUIREMENTS
+      ## INSTRUCTIONS - EXECUTIVE FORMAT
 
-      Please provide a comprehensive market analysis report with the following structure:
+      Create a SHORT, actionable executive summary (not a lengthy report) for management. Follow this structure exactly:
 
-      ### 1. Executive Summary
-      A brief 2-3 sentence overview of the key findings with specific numbers.
+      ### 1. THE SITUATION (1-2 sentences)
+      Brief context on what was analyzed and main insight about program segmentation.
 
-      ### 2. Quantitative Analysis
-      - Price positioning analysis with specific tuition figures
-      - STEM vs Non-STEM comparison if applicable
-      - Cost per credit analysis if data available
-      - Include specific school names and amounts when citing data
+      ### 2. MARKET SEGMENTS (Organize by tuition tier + similar characteristics)
+      Create 2-4 market segments based on tuition ranges, program length, credits, and positioning themes.
 
-      ### 3. Competitive Positioning & Messaging
-      - How schools position their programs based on content snippets
-      - Common themes (affordability, flexibility, prestige, ROI, career outcomes)
-      - Differentiation strategies observed
+      For EACH segment, create a Markdown table with columns:
+      - School Name
+      - Tuition
+      - Credits
+      - $/Credit
+      - Notable Positioning (key differentiator: flexibility, specialization, brand, etc.)
 
-      ### 4. Market Insights & Recommendations
-      - Gaps or opportunities identified
-      - Positioning strategies that stand out
-      - Data quality notes (mention if confidence levels vary)
+      Add a "KEY TAKEAWAY" bullet point after each segment (1-2 sentences explaining competitive implications).
 
-      IMPORTANT GUIDELINES:
-      - Always cite specific school names when mentioning data points
-      - Include the source URL when referencing specific information
-      - Note data confidence levels when relevant
-      - Use actual numbers from the metrics provided
-      - Format as professional Markdown with clear section headers
+      ### 3. KEY METRICS AT A GLANCE
+      Create a 2-column table showing:
+      - Metric | Value | Implication
+
+      Include: Average Tuition, Range, Median, STEM %age, Data Confidence
+
+      ### 4. WHAT THE MARKET IS SAYING
+      Create a table with columns: Theme | Schools | Implication
+
+      Look for repeating patterns in remarks (e.g., "tuition lock", "automatic scholarship", "flexibility in duration", specialization, etc.)
+      Include only 4-6 most important themes observed.
+
+      ### 5. STRATEGIC RECOMMENDATIONS (3-4 bullet points maximum)
+      Focus on gaps/opportunities for OUR institution. Be specific and actionable.
+      Example: "STEM-Designated Program: Only 2 of ${metrics.totalPrograms} programs offer STEM. Opportunity for 40%+ premium positioning."
+
+      ### 6. BOTTOM LINE (1 paragraph)
+      A 2-3 sentence takeaway for senior leadership. Include strategic question or decision needed.
+
+      ## FORMATTING REQUIREMENTS
+      - Use Markdown tables (not prose lists) for segments
+      - Keep each section concise (1-2 paragraphs max, except tables)
+      - Always include school names and specific numbers
+      - Highlight data quality confidence
+      - NO lengthy source URLs—use "Source: [domain]" format if needed
+      - Format as clean, professional Markdown suitable for slides/executive reading
     `;
 
     // Execute with retry logic for transient failures
@@ -899,6 +915,19 @@ router.post('/summary', validateSummary, async (req, res) => {
         logger.info(`Cached summary for project ${projectId}`);
       } catch (cacheError) {
         logger.warn('Failed to cache summary', { error: cacheError.message });
+      }
+
+      // Save to analysis history for audit trail (NEW: US2.5 enhancement)
+      try {
+        const historyId = `analysis-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await sql`
+          INSERT INTO project_analysis_history (id, project_id, analysis_content, metrics, data_hash, cached)
+          VALUES (${historyId}, ${projectId}, ${summary}, ${JSON.stringify(responseData.metrics)}, ${dataHash}, ${wasCached})
+        `;
+        logger.info(`Saved analysis history for project ${projectId}`);
+      } catch (historyError) {
+        logger.warn('Failed to save analysis history', { error: historyError.message });
+        // Don't fail the request if history save fails - it's a secondary feature
       }
     }
 

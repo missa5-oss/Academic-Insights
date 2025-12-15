@@ -1,15 +1,17 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { useToast } from '../context/ToastContext';
 import { useDebounce } from '@/src/hooks/useDebounce';
 import { ExtractionResult, ConfidenceScore, ExtractionStatus } from '../types';
 import { AuditModal } from '../components/AuditModal';
 import { HistoryModal } from '../components/HistoryModal';
 import { AddTargetModal, EditProjectModal } from '../components/ProjectModals';
 import { StatCard } from '../components/StatCard';
-import { generateExecutiveSummary, simulateExtraction, getCampusLocation } from '../services/geminiService';
-import { Search, RefreshCw, Bot, AlertTriangle, CheckCircle, ExternalLink, Eye, Download, Plus, Play, Clock, BarChart3, Table as TableIcon, Trash2, Pencil, Flag, Check, X, History, DollarSign, Target, TrendingUp, TrendingDown } from 'lucide-react';
+import { generateExecutiveSummary, simulateExtraction, getCampusLocation, fetchAnalysisHistory } from '../services/geminiService';
+import { API_URL } from '@/src/config';
+import { Search, RefreshCw, Bot, AlertTriangle, CheckCircle, ExternalLink, Eye, Download, Plus, Play, Clock, BarChart3, Table as TableIcon, Trash2, Pencil, Flag, Check, X, History, DollarSign, Target, TrendingUp, TrendingDown, Copy, Check as CheckIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart as RePieChart, Pie, Legend, LineChart, Line } from 'recharts';
 import { ChatAssistant } from '../components/ChatAssistant';
@@ -19,6 +21,7 @@ export const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { projects, results, addTargets, updateResult, deleteResult, editProject, deleteProject, user, createNewVersion } = useApp();
+  const toast = useToast();
 
   const project = projects.find(p => p.id === id);
   const projectResults = results.filter(r => r.project_id === id);
@@ -50,6 +53,11 @@ export const ProjectDetail: React.FC = () => {
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [processingItems, setProcessingItems] = useState<Record<string, boolean>>({});
   const [locatingItems, setLocatingItems] = useState<Record<string, boolean>>({});
+
+  // NEW: Copy feedback and analysis history
+  const [copiedAnalysis, setCopiedAnalysis] = useState(false);
+  const [analysisHistory, setAnalysisHistory] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   // --- Analytics Data State (US1.1) ---
   const [analyticsData, setAnalyticsData] = useState<{
@@ -87,13 +95,17 @@ export const ProjectDetail: React.FC = () => {
     type: 'deleteProject' | 'bulkDelete' | null;
   }>({ isOpen: false, type: null });
 
-  // Filter logic (uses debounced search for performance)
-  const filteredResults = projectResults.filter(result =>
-    result.school_name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-    result.program_name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
-  );
+  // Filter logic (uses debounced search for performance) - Memoized for optimization
+  const filteredResults = useMemo(() => {
+    return projectResults.filter(result =>
+      result.school_name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      result.program_name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
+    );
+  }, [projectResults, debouncedSearchTerm]);
 
-  const pendingCount = filteredResults.filter(r => r.status === ExtractionStatus.PENDING).length;
+  const pendingCount = useMemo(() => {
+    return filteredResults.filter(r => r.status === ExtractionStatus.PENDING).length;
+  }, [filteredResults]);
 
   // --- Analytics Data Preparation ---
   const chartData = useMemo(() => {
@@ -164,6 +176,7 @@ export const ProjectDetail: React.FC = () => {
 
   const handleRunAnalysis = async (forceRefresh?: boolean) => {
     setIsAnalyzing(true);
+    setCopiedAnalysis(false);
     const response = await generateExecutiveSummary(
       filteredResults.filter(r => r.status === ExtractionStatus.SUCCESS),
       project?.id,
@@ -174,53 +187,80 @@ export const ProjectDetail: React.FC = () => {
       setSummaryMetrics(response.metrics);
     }
     setIsAnalyzing(false);
+
+    // Load history after analysis is generated
+    if (project?.id) {
+      loadAnalysisHistory(project.id);
+    }
+  };
+
+  // Copy analysis to clipboard
+  const handleCopyAnalysis = () => {
+    if (aiAnalysis) {
+      navigator.clipboard.writeText(aiAnalysis).then(() => {
+        setCopiedAnalysis(true);
+        toast.success('Copied', 'Analysis copied to clipboard');
+        setTimeout(() => setCopiedAnalysis(false), 2000);
+      });
+    }
+  };
+
+  // Load analysis history for the project
+  const loadAnalysisHistory = async (projectId: string) => {
+    setIsLoadingHistory(true);
+    try {
+      const history = await fetchAnalysisHistory(projectId, 5);
+      setAnalysisHistory(history);
+    } catch (error) {
+      console.error('Error loading analysis history:', error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
   };
 
   // Fetch analytics data when analysis tab is viewed (US1.1)
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     if (!project) return;
 
     setIsLoadingAnalytics(true);
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/results/analytics/${project.id}`);
+      const response = await fetch(`${API_URL}/api/results/analytics/${project.id}`);
       if (response.ok) {
         const data = await response.json();
         setAnalyticsData(data);
       } else {
-        console.error('Failed to fetch analytics data');
+        toast.error('Failed to load analytics', 'Could not fetch analytics data from the server.');
         setAnalyticsData(null);
       }
     } catch (error) {
-      console.error('Error fetching analytics:', error);
+      toast.error('Network error', 'Could not connect to the server. Please check your connection.');
       setAnalyticsData(null);
     } finally {
       setIsLoadingAnalytics(false);
     }
-  };
+  }, [project, toast]);
 
   // Fetch trends data (US1.2)
-  const fetchTrendsData = async () => {
+  const fetchTrendsData = useCallback(async () => {
     if (!project) return;
 
     setIsLoadingTrends(true);
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/results/trends/${project.id}`);
+      const response = await fetch(`${API_URL}/api/results/trends/${project.id}`);
       if (response.ok) {
         const data = await response.json();
         setTrendsData(data);
       } else {
-        console.error('Failed to fetch trends data');
+        toast.error('Failed to load trends', 'Could not fetch trends data from the server.');
         setTrendsData(null);
       }
     } catch (error) {
-      console.error('Error fetching trends:', error);
+      toast.error('Network error', 'Could not connect to the server. Please check your connection.');
       setTrendsData(null);
     } finally {
       setIsLoadingTrends(false);
     }
-  };
+  }, [project, toast]);
 
   // Load analytics and trends when switching to analysis view
   React.useEffect(() => {
@@ -659,8 +699,8 @@ export const ProjectDetail: React.FC = () => {
              </button>
            )}
            
-           <button 
-             onClick={handleRunAnalysis}
+           <button
+             onClick={() => handleRunAnalysis()}
              disabled={isAnalyzing || isBatchProcessing}
              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-sm transition-all disabled:opacity-70"
            >
@@ -680,9 +720,28 @@ export const ProjectDetail: React.FC = () => {
       {/* AI Analysis Section */}
       {aiAnalysis && (
         <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-blue-100 rounded-xl p-6 shadow-sm animate-fade-in-up">
-           <div className="flex items-center gap-2 mb-3">
-             <Bot className="text-jhu-heritage" size={20} />
-             <h3 className="font-semibold text-slate-900">Executive Summary (Generated by Gemini 2.5)</h3>
+           <div className="flex items-center justify-between gap-2 mb-4">
+             <div className="flex items-center gap-2">
+               <Bot className="text-jhu-heritage" size={20} />
+               <h3 className="font-semibold text-slate-900">Executive Summary (Generated by Gemini 2.5)</h3>
+             </div>
+             <button
+               onClick={handleCopyAnalysis}
+               className="flex items-center gap-2 px-2 py-1 text-xs rounded-lg transition-all hover:bg-blue-100"
+               title="Copy analysis to clipboard"
+             >
+               {copiedAnalysis ? (
+                 <>
+                   <CheckIcon size={14} className="text-green-600" />
+                   <span className="text-green-600">Copied</span>
+                 </>
+               ) : (
+                 <>
+                   <Copy size={14} className="text-slate-600" />
+                   <span className="text-slate-600">Copy</span>
+                 </>
+               )}
+             </button>
            </div>
            <div className="prose prose-sm prose-slate max-w-none">
              <ReactMarkdown>{aiAnalysis}</ReactMarkdown>

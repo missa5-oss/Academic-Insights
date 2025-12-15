@@ -57,12 +57,22 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
   const styles = variantStyles[variant];
 
+  const dialogTitleId = `confirm-dialog-title-${title.toLowerCase().replace(/\s+/g, '-')}`;
+  const dialogDescId = `confirm-dialog-desc-${title.toLowerCase().replace(/\s+/g, '-')}`;
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={dialogTitleId}
+      aria-describedby={dialogDescId}
+    >
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/50 transition-opacity"
         onClick={onCancel}
+        aria-hidden="true"
       />
 
       {/* Dialog */}
@@ -72,23 +82,24 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <button
             onClick={onCancel}
             className="absolute top-4 right-4 p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+            aria-label="Close dialog"
           >
-            <X size={20} />
+            <X size={20} aria-hidden="true" />
           </button>
 
           <div className="p-6">
             {/* Icon */}
-            <div className={`mx-auto w-12 h-12 rounded-full ${styles.icon} flex items-center justify-center mb-4`}>
+            <div className={`mx-auto w-12 h-12 rounded-full ${styles.icon} flex items-center justify-center mb-4`} aria-hidden="true">
               <AlertTriangle size={24} />
             </div>
 
             {/* Title */}
-            <h3 className="text-lg font-semibold text-slate-900 text-center mb-2">
+            <h3 id={dialogTitleId} className="text-lg font-semibold text-slate-900 text-center mb-2">
               {title}
             </h3>
 
             {/* Message */}
-            <p className="text-slate-600 text-center text-sm">
+            <p id={dialogDescId} className="text-slate-600 text-center text-sm">
               {message}
             </p>
           </div>

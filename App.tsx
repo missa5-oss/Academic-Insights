@@ -6,6 +6,7 @@ import { ProjectDetail } from './pages/ProjectDetail';
 import { AdminPanel } from './pages/AdminPanel';
 import { Login } from './pages/Login';
 import { AppProvider, useApp } from './context/AppContext';
+import { ToastProvider } from './context/ToastContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 interface RouteWrapperProps {
@@ -85,9 +86,11 @@ function App() {
   return (
     <ErrorBoundary boundaryName="App">
       <AppProvider>
-        <HashRouter>
-          <AppRoutes />
-        </HashRouter>
+        <ToastProvider>
+          <HashRouter>
+            <AppRoutes />
+          </HashRouter>
+        </ToastProvider>
       </AppProvider>
     </ErrorBoundary>
   );

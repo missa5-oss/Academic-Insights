@@ -310,6 +310,47 @@ export async function initializeDatabase() {
       logger.debug('Index: idx_summaries_project_hash already exists');
     }
 
+    // Create project_analysis_history table for persistent storage (US2.5 enhancement)
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS project_analysis_history (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          analysis_content TEXT NOT NULL,
+          metrics JSONB,
+          data_hash TEXT NOT NULL,
+          cached BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          created_by TEXT
+        )
+      `;
+      logger.info('Table: project_analysis_history created');
+    } catch (error) {
+      logger.debug('Table: project_analysis_history already exists');
+    }
+
+    // Create index for analysis history lookups by project
+    try {
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_analysis_history_project
+        ON project_analysis_history(project_id, created_at DESC)
+      `;
+      logger.info('Index: idx_analysis_history_project created');
+    } catch (error) {
+      logger.debug('Index: idx_analysis_history_project already exists');
+    }
+
+    // Create index for analysis history by data_hash (deduplication)
+    try {
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_analysis_history_hash
+        ON project_analysis_history(project_id, data_hash, created_at DESC)
+      `;
+      logger.info('Index: idx_analysis_history_hash created');
+    } catch (error) {
+      logger.debug('Index: idx_analysis_history_hash already exists');
+    }
+
     // Add additional_fees column if it doesn't exist (Sprint 2 context enhancement)
     try {
       await sql`

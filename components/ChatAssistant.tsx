@@ -128,7 +128,12 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ data, projectId, i
       const response = await fetch(`${API_URL}/api/conversations/${conversationId}/messages`);
       if (response.ok) {
         const data = await response.json();
-        const loadedMessages: Message[] = data.map((msg: any) => ({
+        interface APIMessage {
+          id: string;
+          role: 'user' | 'assistant';
+          content: string;
+        }
+        const loadedMessages: Message[] = data.map((msg: APIMessage) => ({
           id: msg.id,
           role: msg.role === 'assistant' ? 'model' : msg.role,
           text: msg.content

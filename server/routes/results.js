@@ -546,4 +546,38 @@ router.get('/analytics/:projectId', async (req, res) => {
   }
 });
 
+// GET analysis history for a project (NEW: US2.5 enhancement)
+router.get('/analysis-history/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { limit = 10 } = req.query;
+
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
+    }
+
+    const analyses = await sql`
+      SELECT
+        id,
+        project_id,
+        analysis_content,
+        metrics,
+        data_hash,
+        cached,
+        created_at
+      FROM project_analysis_history
+      WHERE project_id = ${projectId}
+      ORDER BY created_at DESC
+      LIMIT ${Math.min(parseInt(limit) || 10, 100)}
+    `;
+
+    logger.info(`Fetched ${analyses.length} analysis records for project ${projectId}`);
+    res.json(analyses);
+
+  } catch (error) {
+    logger.error('Error fetching analysis history', error);
+    res.status(500).json({ error: 'Failed to fetch analysis history' });
+  }
+});
+
 export default router;
