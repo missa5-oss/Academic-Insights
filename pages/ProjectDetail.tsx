@@ -13,6 +13,7 @@ import { generateExecutiveSummary, simulateExtraction, getCampusLocation, fetchA
 import { API_URL } from '@/src/config';
 import { Search, RefreshCw, Bot, AlertTriangle, CheckCircle, ExternalLink, Eye, Download, Plus, Play, Clock, BarChart3, Table as TableIcon, Trash2, Pencil, Flag, Check, X, History, DollarSign, Target, TrendingUp, TrendingDown, Copy, Check as CheckIcon, ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart as RePieChart, Pie, Legend, LineChart, Line } from 'recharts';
 import { ChatAssistant } from '../components/ChatAssistant';
 import { ConfirmDialog } from '@/src/components/ConfirmDialog';
@@ -812,7 +813,7 @@ export const ProjectDetail: React.FC = () => {
                                 prose-td:p-3 prose-td:border prose-td:border-slate-200 prose-td:text-slate-600
                                 prose-strong:text-slate-800
                                 prose-p:text-slate-600 prose-p:leading-relaxed prose-p:my-3">
-                  <ReactMarkdown>{aiAnalysis}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiAnalysis}</ReactMarkdown>
                 </div>
 
                 {/* Metadata Footer */}
