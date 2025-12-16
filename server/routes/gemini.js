@@ -257,10 +257,11 @@ EXTRACTION RULES:
 - Put fees in additional_fees field separately
 - For private schools, there is no in-state/out-of-state distinction
 - academic_year = Use 2025-2026 rates if available, otherwise most current year
+- program_length_months = MUST be a NUMBER of months (e.g., "2 years" → 24, "18 months" → 18, "1.5 years" → 18, "21 months" → 21)
 - If program not found on official .edu site, set status="Not Found"
 
 OUTPUT - Return ONLY valid JSON, no markdown, no explanation:
-{"tuition_amount":"$XX,XXX","tuition_period":"full program","academic_year":"2025-2026","cost_per_credit":"$X,XXX","total_credits":"XX","program_length":"X years","actual_program_name":"exact name from website","is_stem":false,"additional_fees":"$X,XXX or null","remarks":"any notable info","status":"Success"}
+{"tuition_amount":"$XX,XXX","tuition_period":"full program","academic_year":"2025-2026","cost_per_credit":"$X,XXX","total_credits":"XX","program_length_months":24,"actual_program_name":"exact name from website","is_stem":false,"additional_fees":"$X,XXX or null","remarks":"any notable info","status":"Success"}
   `;
 
   const response = await withRetry(
@@ -347,11 +348,15 @@ router.post('/extract', validateExtraction, async (req, res) => {
     let usedProgramVariation = null;
 
     // If program not found or low confidence, try alternative program names
+    // Limit to MAX_VARIATION_RETRIES to avoid wasting API credits
+    const MAX_VARIATION_RETRIES = 3;
+
     if (extractedData.status === 'Not Found' || !extractedData.tuition_amount) {
-      const variations = getProgramVariations(program);
+      const allVariations = getProgramVariations(program);
+      const variations = allVariations.slice(0, MAX_VARIATION_RETRIES); // Limit retries
 
       if (variations.length > 0) {
-        logger.info(`Program "${program}" not found, trying ${variations.length} variations for: ${school}`);
+        logger.info(`Program "${program}" not found, trying up to ${variations.length} variations (of ${allVariations.length} available) for: ${school}`);
 
         for (const variation of variations) {
           try {
@@ -390,6 +395,7 @@ router.post('/extract', validateExtraction, async (req, res) => {
         cost_per_credit: null,
         total_credits: null,
         program_length: null,
+        program_length_months: null,
         actual_program_name: null,
         is_stem: false,
         additional_fees: null,
@@ -604,13 +610,32 @@ router.post('/extract', validateExtraction, async (req, res) => {
     // Sanitize raw_content for database storage
     const sanitizedRawContent = sanitizeForDatabase(rawContentSummary) || 'No content summary provided.';
 
+    // Handle program_length_months - ensure it's a number or null
+    let programLengthMonths = null;
+    if (extractedData.program_length_months !== null && extractedData.program_length_months !== undefined) {
+      const parsed = parseInt(extractedData.program_length_months, 10);
+      programLengthMonths = isNaN(parsed) ? null : parsed;
+    }
+    // Fallback: try to parse from old program_length field if it exists
+    if (programLengthMonths === null && extractedData.program_length) {
+      const lengthStr = String(extractedData.program_length).toLowerCase();
+      const yearsMatch = lengthStr.match(/([\d.]+)\s*years?/);
+      const monthsMatch = lengthStr.match(/([\d.]+)\s*months?/);
+      if (monthsMatch) {
+        programLengthMonths = Math.round(parseFloat(monthsMatch[1]));
+      } else if (yearsMatch) {
+        programLengthMonths = Math.round(parseFloat(yearsMatch[1]) * 12);
+      }
+    }
+
     const result = {
       tuition_amount: formatCurrency(tuitionAmount),
       tuition_period: tuitionPeriod,
       academic_year: extractedData.academic_year || '2025-2026',
       cost_per_credit: formatCurrency(extractedData.cost_per_credit) || null,
       total_credits: extractedData.total_credits || null,
-      program_length: extractedData.program_length || null,
+      program_length: extractedData.program_length || null, // Keep for backward compatibility
+      program_length_months: programLengthMonths, // New numeric field for analysis
       actual_program_name: extractedData.actual_program_name || null,
       is_stem: extractedData.is_stem === true ? true : false, // Default to false if not explicitly true
       additional_fees: formatCurrency(extractedData.additional_fees) || null,
