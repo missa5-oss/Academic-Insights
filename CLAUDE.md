@@ -851,7 +851,7 @@ A comprehensive 5-sprint development roadmap has been created to transform Acade
 | 2 | AI Features Enhancement | Weeks 3-5 | v1.2.0 | 📋 PLANNING COMPLETE |
 | 3 | Admin Observability & Monitoring | Weeks 6-8 | v1.3.0 | 📅 Ready to Plan |
 | 4 | Security Hardening | Weeks 9-11 | v2.0.0 | ⚠️ CRITICAL - Blocks Production |
-| 5 | Agentic AI Extraction Planning | Weeks 12-14 | v2.1.0+ | 📋 Design Phase |
+| 5 | Agentic AI Extraction | Weeks 12-14 | v2.1.0+ | 🚧 IN PROGRESS (Phase 1 Complete) |
 
 #### Roadmap Documentation
 
@@ -1032,3 +1032,222 @@ Week 12-14: Sprint 5 (Agentic Planning)
 **Roadmap Access**:
 - All plans: `/Users/mahmoudissa/.claude/plans/`
 - Start with: `INDEX.md` or `ROADMAP-SUMMARY.md`
+
+---
+
+## Sprint 5: Agentic Extraction System (🚧 IN PROGRESS)
+
+**Status**: Phase 1 & 2 Complete - Verification Agent + Program Variations Retry
+**Branch**: `feature/agentic-extraction`
+**Date Started**: December 16, 2025
+
+### Overview
+
+Transitioning from single-pass Gemini extraction to a **multi-agent architecture** for improved accuracy. The goal is to achieve smarter, more reliable tuition data extraction without requiring manual re-runs.
+
+**Current Problem** (before this sprint):
+- Single-pass extraction with no verification (~80% accuracy)
+- ~20% of extractions return empty grounding chunks (Google API limitation)
+- No ability to cross-validate or self-correct
+- Inconsistent confidence scoring
+
+**Solution Being Implemented**: Generator-Critic pattern with:
+1. **Extractor Agent** - Extracts data using Gemini + Google Search grounding
+2. **Verifier Agent** - Validates extraction accuracy with rule-based + AI checks
+
+### Phase 1: Verification Agent (✅ COMPLETE)
+
+**Files Created**:
+- `server/agents/verifierAgent.js` - Verification agent with 4 rule-based checks + AI verification
+
+**Files Modified**:
+- `server/routes/gemini.js` - Integrated verification agent, updated prompt
+- `server/db.js` - Added verification tracking columns
+- `server/routes/results.js` - Persistence of verification data
+- `services/geminiService.ts` - Frontend mapping for verification fields
+- `types.ts` - TypeScript interfaces for verification
+
+**Database Schema Updates**:
+```sql
+ALTER TABLE extraction_results ADD COLUMN IF NOT EXISTS verification_data JSONB DEFAULT NULL;
+ALTER TABLE extraction_results ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT NULL;
+ALTER TABLE extraction_results ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_results_verification_status ON extraction_results(project_id, verification_status);
+```
+
+**Verification Agent Checks**:
+1. **Math Check**: Does `cost_per_credit × total_credits ≈ tuition_amount`?
+2. **Source Check**: Is the URL from the correct school's domain?
+3. **Completeness Check**: Are critical fields present?
+4. **Plausibility Check**: Is tuition in reasonable range ($10K-$250K)?
+5. **AI Verification**: Gemini reviews source content to confirm data accuracy
+
+**Confidence Logic**:
+- **High**: All rule-based checks pass AND AI confirms source supports data
+- **Medium**: Most checks pass but some concerns
+- **Low**: Critical fields missing or AI cannot verify
+
+**Commits on `feature/agentic-extraction`**:
+1. `e02840e` - feat: Add verification agent for improved extraction accuracy
+2. `d497021` - feat: Add verification data persistence to database
+3. `0afbf65` - fix: Update academic year to 2025-2026 and dedupe source content
+4. `38fa0e4` - fix: Improve verification confidence logic
+5. `6ce3e58` - fix: Add tuition-only rule to extraction prompt
+6. `ee76d3b` - fix: Improve dotenv loading and add source retry mechanism
+7. `1ab2619` - feat: Add Phase 2 auto-retry with program name variations
+
+### Extraction Prompt Updates (December 16, 2025)
+
+Located at `server/routes/gemini.js:186-209`:
+
+```javascript
+const prompt = `
+Search "${school}" "${program}" tuition site:.edu
+
+CRITICAL: Only use .edu official sources. Ignore clearadmit, poets&quants, shiksha, collegechoice.
+
+PROGRAM NAME VARIATIONS:
+- If searching for "Part-Time MBA", also check: Professional MBA, Weekend MBA, Evening MBA, Working Professional MBA
+- If searching for "Executive MBA", also check: EMBA, Exec MBA
+- Schools may use different names for the same program type
+
+RULES:
+- tuition_amount = TOTAL PROGRAM COST (cost_per_credit × total_credits)
+- Do NOT include the word "total" in tuition_amount, just the dollar amount
+- TUITION ONLY - Do NOT include fees (technology fees, student fees, etc.) in tuition_amount
+- Put any fees in additional_fees field separately
+- Use IN-STATE rates, put out-of-state in remarks
+- academic_year = Use 2025-2026 rates if available, otherwise use the most current year
+- If not found on .edu site, status="Not Found"
+
+OUTPUT - Return ONLY this JSON, no other text:
+{"tuition_amount":"$XX,XXX","tuition_period":"full program","academic_year":"2025-2026",...}
+`;
+```
+
+### Source Content Deduplication
+
+Added deduplication logic to prevent duplicate content snippets in `validated_sources`:
+- Deduplicates by URL (exact match)
+- Deduplicates by content (first 200 chars normalized)
+- Keeps top 3 unique sources
+
+### TypeScript Types Added
+
+```typescript
+// types.ts
+export type VerificationStatus = 'verified' | 'needs_review' | 'retry_recommended' | 'failed' | 'skipped';
+
+export interface VerificationResult {
+  status: VerificationStatus;
+  issues: string[];
+  validations: string[];
+  reasoning: string;
+  completenessScore: number;
+  retryRecommended: boolean;
+}
+
+// Added to ExtractionResult:
+verification?: VerificationResult;
+verification_status?: VerificationStatus;
+retry_count?: number;
+```
+
+### Phase 2: Program Name Variations Retry (✅ COMPLETE)
+
+**Status**: Implemented December 16, 2025
+**Commit**: `1ab2619` - feat: Add Phase 2 auto-retry with program name variations
+
+**Features Implemented**:
+- `PROGRAM_VARIATIONS` mapping with 18+ program types and their alternatives
+- `getProgramVariations()` function for intelligent name matching
+- Auto-retry extraction when "Not Found" or missing tuition
+- Sequential retry through all variations until success
+- Transparent logging of all variation attempts
+- Include tried variations in "Not Found" remarks
+
+**Supported Program Variations**:
+| Program Type | Alternative Names Tried |
+|-------------|------------------------|
+| Part-Time MBA | Professional, Weekend, Evening, Flex, Working Professional MBA |
+| Executive MBA | EMBA, Exec MBA, Executive MBA Program |
+| Full-Time MBA | Two-Year, Residential, Traditional MBA |
+| Online MBA | Distance, Remote, Virtual MBA |
+| MS Finance | MSF, Master of Science in Finance |
+| MS Accounting | MSA, MAcc, Master of Accountancy |
+| MS Business Analytics | MSBA, Master of Business Analytics |
+| MS Information Systems | MSIS, Master of Information Systems |
+
+**How It Works**:
+1. Initial extraction attempt with user-provided program name
+2. If "Not Found" or no tuition returned, get variations list
+3. Try each variation sequentially until data found
+4. Add note to remarks: `Program found as "X" instead of "Y"`
+5. If all variations fail, return "Not Found" with list of tried variations
+
+**Example Log Output**:
+```
+[INFO] Starting extraction for: Harvard Business School - Weekend MBA
+[INFO] Program "Weekend MBA" not found, trying 4 variations for: Harvard Business School
+[INFO] Trying variation: Harvard Business School - Part-Time MBA
+[INFO] Trying variation: Harvard Business School - Professional MBA
+...
+```
+
+### Phase 3: Multi-Search Strategy (Not started)
+- Parallel search queries with multiple variations
+- Rank and merge results
+- Handle empty grounding chunks better
+
+### Known Issues
+
+#### Gemini API Key Management
+
+**Important**: The Gemini API key may appear to "expire" but this is usually NOT actual expiration. Common causes:
+
+1. **Temporary Rate Limits**: Per-minute limits may trigger briefly
+2. **Network/API Glitches**: Transient errors that resolve quickly
+3. **Quota Exhaustion**: Free tier has daily limits (10K requests/day for gemini-2.5-flash)
+
+**Checking Your Key Status**:
+- Visit [Google AI Studio](https://aistudio.google.com/apikey) → Rate Limit tab
+- Check usage vs limits for your model (e.g., gemini-2.5-flash: 1000 RPM, 10K RPD)
+
+**If Key Actually Expires**:
+1. Go to [Google AI Studio](https://aistudio.google.com/apikey)
+2. Generate a new API key
+3. Update `server/.env` with new key
+4. Restart server
+
+**Built-in Retry Logic**: The app automatically retries failed API calls up to 3 times with exponential backoff, which handles most transient errors.
+
+### Documentation
+
+- **Proposal Document**: `docs/AGENTIC_EXTRACTION_PROPOSAL.md` - Full technical proposal with ADK analysis
+- **Implementation**: `server/agents/verifierAgent.js` - Complete verification agent code
+
+### Testing the Verification Agent
+
+1. Start server: `npm run server`
+2. Run an extraction in the UI
+3. Check server logs for verification output:
+   ```
+   [INFO] Running verification agent for: School - Program
+   [INFO] Verification complete for: School - Program
+   ```
+4. View verification status in extraction result
+
+### Debugging Commands
+
+```bash
+# Check server logs during extraction
+npm run server
+
+# View recent extractions with verification status
+node server/check-sources.js
+
+# Test extraction with verification
+curl -X POST http://localhost:3001/api/gemini/extract \
+  -H "Content-Type: application/json" \
+  -d '{"school": "University of Maryland", "program": "Full-Time MS Information System"}'
+```
