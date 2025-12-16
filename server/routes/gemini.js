@@ -200,6 +200,8 @@ PROGRAM NAME VARIATIONS:
 RULES:
 - tuition_amount = TOTAL PROGRAM COST (cost_per_credit × total_credits)
 - Do NOT include the word "total" in tuition_amount, just the dollar amount
+- TUITION ONLY - Do NOT include fees (technology fees, student fees, etc.) in tuition_amount
+- Put any fees in additional_fees field separately
 - Use IN-STATE rates, put out-of-state in remarks
 - academic_year = Use 2025-2026 rates if available, otherwise use the most current year
 - If not found on .edu site, status="Not Found"
