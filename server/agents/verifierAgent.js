@@ -496,16 +496,21 @@ export async function verifyExtraction(ai, extractedData, schoolName, programNam
 
   // Adjust based on AI verification
   if (aiVerification) {
-    if (aiVerification.verification_status === 'retry_recommended') {
+    // Only downgrade status if AI says source doesn't support data
+    if (aiVerification.verification_status === 'retry_recommended' && !aiVerification.source_supports_data) {
       status = 'retry_recommended';
       retryRecommended = true;
       suggestedSearchQuery = aiVerification.alternative_search_query || suggestedSearchQuery;
-    } else if (aiVerification.verification_status === 'needs_review' && status === 'verified') {
+    } else if (aiVerification.verification_status === 'needs_review' && status === 'verified' && !aiVerification.source_supports_data) {
+      // Only set needs_review if source doesn't support data
       status = 'needs_review';
     }
 
-    // Adjust confidence
-    if (aiVerification.confidence_adjustment === 'increase' && confidence !== 'High') {
+    // Adjust confidence based on AI and rule-based results
+    if (aiVerification.source_supports_data && allPassed) {
+      // If AI confirms data AND all rule-based checks pass, set High confidence
+      confidence = 'High';
+    } else if (aiVerification.confidence_adjustment === 'increase' && confidence !== 'High') {
       confidence = confidence === 'Low' ? 'Medium' : 'High';
     } else if (aiVerification.confidence_adjustment === 'decrease' && confidence !== 'Low') {
       confidence = confidence === 'High' ? 'Medium' : 'Low';
