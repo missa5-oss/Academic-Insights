@@ -44,6 +44,27 @@ export interface SourceValidation {
   primary_source_valid: boolean;
 }
 
+// ==========================================
+// Agentic Extraction: Verification Types
+// ==========================================
+
+/**
+ * Verification status from the Verifier Agent
+ */
+export type VerificationStatus = 'verified' | 'needs_review' | 'retry_recommended' | 'failed' | 'skipped';
+
+/**
+ * Verification result from the Verifier Agent
+ */
+export interface VerificationResult {
+  status: VerificationStatus;
+  issues: string[];
+  validations: string[];
+  reasoning: string;
+  completenessScore: number;
+  retryRecommended: boolean;
+}
+
 export interface ExtractionResult {
   id: string;
   project_id: string;
@@ -91,6 +112,11 @@ export interface ExtractionResult {
   actual_program_name?: string | null; // Official program name as displayed on school website
   user_comments?: string | null; // User-editable comments/notes
   is_stem?: boolean; // Whether the program is STEM designated (false if not explicitly stated)
+
+  // Verification agent results
+  verification?: VerificationResult; // Results from the verification agent
+  verification_status?: VerificationStatus; // Quick access to verification status
+  retry_count?: number; // Number of extraction retry attempts
 }
 
 export interface Project {

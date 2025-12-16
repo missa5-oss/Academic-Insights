@@ -534,6 +534,54 @@ export async function initializeDatabase() {
       logger.debug('Index: idx_ai_usage_cost already exists');
     }
 
+    // ==========================================
+    // Agentic Extraction: Verification Tracking
+    // ==========================================
+
+    // Add verification_data column for storing verification agent results
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS verification_data JSONB DEFAULT NULL
+      `;
+      logger.info('Migration: verification_data column added');
+    } catch (error) {
+      logger.debug('Migration: verification_data column already exists');
+    }
+
+    // Add verification_status column for quick filtering
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT NULL
+      `;
+      logger.info('Migration: verification_status column added');
+    } catch (error) {
+      logger.debug('Migration: verification_status column already exists');
+    }
+
+    // Add retry_count column for tracking extraction attempts
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0
+      `;
+      logger.info('Migration: retry_count column added');
+    } catch (error) {
+      logger.debug('Migration: retry_count column already exists');
+    }
+
+    // Create index for verification status filtering
+    try {
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_results_verification_status
+        ON extraction_results(project_id, verification_status)
+      `;
+      logger.info('Index: idx_results_verification_status created');
+    } catch (error) {
+      logger.debug('Index: idx_results_verification_status already exists');
+    }
+
     logger.info('Database schema initialized successfully');
   } catch (error) {
     logger.error('Database initialization error', error);

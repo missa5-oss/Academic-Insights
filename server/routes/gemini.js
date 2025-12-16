@@ -6,6 +6,7 @@ import { GEMINI_CONFIG } from '../config.js';
 import logger from '../utils/logger.js';
 import { sql } from '../db.js';
 import { logAiUsage } from '../utils/aiLogger.js';
+import { verifyExtraction } from '../agents/verifierAgent.js';
 
 const router = Router();
 
@@ -501,12 +502,55 @@ router.post('/extract', validateExtraction, async (req, res) => {
       raw_content: sanitizedRawContent
     };
 
+    // --- VERIFICATION AGENT ---
+    // Run verification to validate extraction accuracy
+    logger.info(`Running verification agent for: ${school} - ${program}`);
+    let verification = null;
+    try {
+      verification = await verifyExtraction(ai, result, school, program, { useAIVerification: true });
+
+      // Update confidence score based on verification
+      if (verification) {
+        result.confidence_score = verification.confidence;
+        result.verification = {
+          status: verification.status,
+          issues: verification.issues,
+          validations: verification.validations,
+          reasoning: verification.reasoning,
+          completenessScore: verification.completenessScore,
+          retryRecommended: verification.retryRecommended
+        };
+
+        // Add verification notes to remarks if there are issues
+        if (verification.issues.length > 0 && verification.status !== 'verified') {
+          const verificationNote = `[Verification: ${verification.issues.length} issue(s) found]`;
+          result.remarks = result.remarks
+            ? `${result.remarks} ${verificationNote}`
+            : verificationNote;
+        }
+
+        logger.info(`Verification complete for: ${school} - ${program}`, {
+          verificationStatus: verification.status,
+          originalConfidence: confidenceScore,
+          adjustedConfidence: verification.confidence,
+          issueCount: verification.issues.length,
+          retryRecommended: verification.retryRecommended
+        });
+      }
+    } catch (verificationError) {
+      logger.warn(`Verification agent failed for: ${school} - ${program}`, {
+        error: verificationError.message
+      });
+      // Continue without verification - don't fail the extraction
+    }
+
     logger.info(`Extraction success for: ${school} - ${program}`, {
       tuition: result.tuition_amount,
       program: result.actual_program_name,
       stem: result.is_stem,
       confidence: result.confidence_score,
-      status: result.status
+      status: result.status,
+      verified: verification?.status || 'skipped'
     });
 
     // Log AI usage success
@@ -524,7 +568,9 @@ router.post('/extract', validateExtraction, async (req, res) => {
         status: result.status,
         confidence_score: result.confidence_score,
         has_tuition: !!result.tuition_amount,
-        sources_count: validatedSources.length
+        sources_count: validatedSources.length,
+        verification_status: verification?.status || 'skipped',
+        verification_issues: verification?.issues?.length || 0
       }
     });
 
