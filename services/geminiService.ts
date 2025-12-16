@@ -326,6 +326,10 @@ export const simulateExtraction = async (school: string, program: string): Promi
       validated_sources: data.validated_sources || [],
       raw_content: data.raw_content || "No content summary provided.",
 
+      // Verification agent results
+      verification: data.verification || undefined,
+      verification_status: data.verification?.status || undefined,
+
       // Audit trail
       updated_at: new Date().toISOString()
     };

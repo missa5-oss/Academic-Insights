@@ -210,7 +210,8 @@ router.put('/:id', async (req, res) => {
       total_credits, program_length, remarks, location_data,
       confidence_score, status, source_url, validated_sources,
       extraction_date, raw_content, is_flagged,
-      actual_program_name, user_comments, is_stem, updated_at
+      actual_program_name, user_comments, is_stem, updated_at,
+      verification, verification_status, retry_count
     } = req.body;
 
     const [result] = await sql`
@@ -234,7 +235,10 @@ router.put('/:id', async (req, res) => {
         actual_program_name = COALESCE(${actual_program_name}, actual_program_name),
         user_comments = COALESCE(${user_comments}, user_comments),
         is_stem = CASE WHEN ${is_stem}::boolean IS NULL THEN is_stem ELSE ${is_stem}::boolean END,
-        updated_at = COALESCE(${updated_at}, updated_at)
+        updated_at = COALESCE(${updated_at}, updated_at),
+        verification_data = COALESCE(${verification ? JSON.stringify(verification) : null}, verification_data),
+        verification_status = COALESCE(${verification_status}, verification_status),
+        retry_count = COALESCE(${retry_count}, retry_count)
       WHERE id = ${req.params.id}
       RETURNING *
     `;
