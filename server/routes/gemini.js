@@ -188,26 +188,31 @@ const getClient = () => {
  */
 async function extractProgramInfo(ai, school, program) {
   const prompt = `
-Search "${school}" "${program}" tuition site:.edu
+Search for "${school}" "${program}" tuition and fees on the official .edu website.
 
-CRITICAL: Only use .edu official sources. Ignore clearadmit, poets&quants, shiksha, collegechoice.
+SEARCH STRATEGY:
+1. First, find the official business school website (e.g., wharton.upenn.edu, kellogg.northwestern.edu, haas.berkeley.edu)
+2. Look for the "Tuition & Fees", "Cost", or "Financial Aid" page for the specific program
+3. ONLY use data from official .edu university/business school websites
+
+IGNORE these sources completely: clearadmit, poets&quants, shiksha, collegechoice, usnews, bloomberg, fortune, any non-.edu site
 
 PROGRAM NAME VARIATIONS:
-- If searching for "Part-Time MBA", also check: Professional MBA, Weekend MBA, Evening MBA, Working Professional MBA
-- If searching for "Executive MBA", also check: EMBA, Exec MBA
-- Schools may use different names for the same program type
+- "Part-Time MBA" may be called: Professional MBA, Weekend MBA, Evening MBA, Flex MBA, Working Professional MBA
+- "Executive MBA" may be called: EMBA, Exec MBA
+- "Full-Time MBA" may be called: Two-Year MBA, Residential MBA, Traditional MBA
 
-RULES:
-- tuition_amount = TOTAL PROGRAM COST (cost_per_credit × total_credits)
-- Do NOT include the word "total" in tuition_amount, just the dollar amount
-- TUITION ONLY - Do NOT include fees (technology fees, student fees, etc.) in tuition_amount
-- Put any fees in additional_fees field separately
-- Use IN-STATE rates, put out-of-state in remarks
-- academic_year = Use 2025-2026 rates if available, otherwise use the most current year
-- If not found on .edu site, status="Not Found"
+EXTRACTION RULES:
+- tuition_amount = TOTAL PROGRAM TUITION (cost_per_credit × total_credits, or stated total)
+- Do NOT include "total" word in tuition_amount - just "$XX,XXX"
+- TUITION ONLY - exclude fees (technology, student services, health) from tuition_amount
+- Put fees in additional_fees field separately
+- For private schools, there is no in-state/out-of-state distinction
+- academic_year = Use 2025-2026 rates if available, otherwise most current year
+- If program not found on official .edu site, set status="Not Found"
 
-OUTPUT - Return ONLY this JSON, no other text:
-{"tuition_amount":"$XX,XXX","tuition_period":"full program","academic_year":"2025-2026","cost_per_credit":"$X,XXX","total_credits":"XX","program_length":"X years","actual_program_name":"name","is_stem":false,"additional_fees":null,"remarks":null,"status":"Success"}
+OUTPUT - Return ONLY valid JSON, no markdown, no explanation:
+{"tuition_amount":"$XX,XXX","tuition_period":"full program","academic_year":"2025-2026","cost_per_credit":"$X,XXX","total_credits":"XX","program_length":"X years","actual_program_name":"exact name from website","is_stem":false,"additional_fees":"$X,XXX or null","remarks":"any notable info","status":"Success"}
   `;
 
   const response = await withRetry(
@@ -330,8 +335,24 @@ router.post('/extract', validateExtraction, async (req, res) => {
       groundingSupportsCount: response.candidates?.[0]?.groundingMetadata?.groundingSupports?.length || 0
     });
 
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    const supportingChunks = response.candidates?.[0]?.groundingMetadata?.groundingSupports || [];
+    let groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    let supportingChunks = response.candidates?.[0]?.groundingMetadata?.groundingSupports || [];
+
+    // Retry once if no grounding chunks returned (Google API sometimes returns empty)
+    if (groundingChunks.length === 0 && extractedData.status === 'Success') {
+      logger.info(`Retrying extraction for sources: ${school} - ${program}`);
+      try {
+        const retryResult = await extractProgramInfo(ai, school, program);
+        const retryGrounding = retryResult.response.candidates?.[0]?.groundingMetadata;
+        if (retryGrounding?.groundingChunks?.length > 0) {
+          groundingChunks = retryGrounding.groundingChunks;
+          supportingChunks = retryGrounding.groundingSupports || [];
+          logger.info(`Retry succeeded - got ${groundingChunks.length} sources for: ${school} - ${program}`);
+        }
+      } catch (retryError) {
+        logger.warn(`Retry for sources failed: ${school} - ${program}`, { error: retryError.message });
+      }
+    }
 
     if (groundingChunks && groundingChunks.length > 0) {
         logger.info(`Grounding sources for ${school} - ${program}`, {

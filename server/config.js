@@ -6,7 +6,15 @@
  */
 
 import dotenv from 'dotenv';
-dotenv.config();
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// Get the directory of this config file (server/)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load .env from the server directory, override existing env vars
+dotenv.config({ path: join(__dirname, '.env'), override: true });
 
 // Application version - keep in sync with package.json
 export const APP_VERSION = '1.4.0';
