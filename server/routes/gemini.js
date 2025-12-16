@@ -183,6 +183,54 @@ const getClient = () => {
 };
 
 /**
+ * Program name variations mapping for retry logic
+ * When initial extraction returns "Not Found" or low confidence,
+ * we can retry with alternative program names
+ */
+const PROGRAM_VARIATIONS = {
+  'part-time mba': ['Professional MBA', 'Weekend MBA', 'Evening MBA', 'Flex MBA', 'Working Professional MBA', 'Part-Time MBA'],
+  'professional mba': ['Part-Time MBA', 'Weekend MBA', 'Evening MBA', 'Flex MBA', 'Working Professional MBA'],
+  'weekend mba': ['Part-Time MBA', 'Professional MBA', 'Evening MBA', 'Flex MBA'],
+  'evening mba': ['Part-Time MBA', 'Professional MBA', 'Weekend MBA', 'Flex MBA'],
+  'flex mba': ['Part-Time MBA', 'Professional MBA', 'Flexible MBA', 'Evening MBA'],
+  'executive mba': ['EMBA', 'Exec MBA', 'Executive MBA Program'],
+  'emba': ['Executive MBA', 'Exec MBA', 'Executive MBA Program'],
+  'full-time mba': ['Two-Year MBA', 'Residential MBA', 'Traditional MBA', 'Full-Time MBA Program', 'MBA'],
+  'two-year mba': ['Full-Time MBA', 'Residential MBA', 'Traditional MBA', 'MBA'],
+  'mba': ['Full-Time MBA', 'Two-Year MBA', 'MBA Program'],
+  'online mba': ['Distance MBA', 'Remote MBA', 'Virtual MBA', 'Online MBA Program'],
+  'ms finance': ['Master of Science in Finance', 'MSF', 'MS in Finance', 'Master in Finance'],
+  'msf': ['MS Finance', 'Master of Science in Finance', 'MS in Finance'],
+  'ms accounting': ['Master of Science in Accounting', 'MSA', 'MAcc', 'Master of Accountancy'],
+  'ms marketing': ['Master of Science in Marketing', 'MSM', 'MS in Marketing'],
+  'ms business analytics': ['MSBA', 'Master of Business Analytics', 'MS Analytics', 'Master of Science in Business Analytics'],
+  'msba': ['MS Business Analytics', 'Master of Business Analytics', 'MS Analytics'],
+  'ms information systems': ['MSIS', 'MS in Information Systems', 'Master of Information Systems', 'MS IT'],
+  'msis': ['MS Information Systems', 'Master of Information Systems', 'MS in IS']
+};
+
+/**
+ * Get alternative program names to try if initial extraction fails
+ */
+function getProgramVariations(program) {
+  const normalizedProgram = program.toLowerCase().trim();
+
+  // Direct match
+  if (PROGRAM_VARIATIONS[normalizedProgram]) {
+    return PROGRAM_VARIATIONS[normalizedProgram];
+  }
+
+  // Partial match - check if program contains any key
+  for (const [key, variations] of Object.entries(PROGRAM_VARIATIONS)) {
+    if (normalizedProgram.includes(key) || key.includes(normalizedProgram)) {
+      return variations;
+    }
+  }
+
+  return [];
+}
+
+/**
  * Extract complete tuition and program information in a single API call
  * Combines tuition, fees, credits, and program details for efficiency
  */
@@ -295,10 +343,46 @@ router.post('/extract', validateExtraction, async (req, res) => {
       });
     }
 
-    const extractedData = extractionResult.data;
+    let extractedData = extractionResult.data;
+    let usedProgramVariation = null;
 
-    // If program not found, return early
-    if (extractedData.status === 'Not Found') {
+    // If program not found or low confidence, try alternative program names
+    if (extractedData.status === 'Not Found' || !extractedData.tuition_amount) {
+      const variations = getProgramVariations(program);
+
+      if (variations.length > 0) {
+        logger.info(`Program "${program}" not found, trying ${variations.length} variations for: ${school}`);
+
+        for (const variation of variations) {
+          try {
+            logger.info(`Trying variation: ${school} - ${variation}`);
+            const retryResult = await extractProgramInfo(ai, school, variation);
+
+            if (retryResult.data.status === 'Success' && retryResult.data.tuition_amount) {
+              logger.info(`Found data using variation "${variation}" for: ${school}`);
+              extractionResult = retryResult;
+              extractedData = retryResult.data;
+              usedProgramVariation = variation;
+              // Add note about the variation used
+              extractedData.remarks = extractedData.remarks
+                ? `${extractedData.remarks}. Found as "${variation}"`
+                : `Program found as "${variation}" instead of "${program}"`;
+              break;
+            }
+          } catch (varError) {
+            logger.warn(`Variation "${variation}" failed for ${school}`, { error: varError.message });
+          }
+        }
+      }
+    }
+
+    // If still not found after variations, return Not Found
+    if (extractedData.status === 'Not Found' || !extractedData.tuition_amount) {
+      const triedVariations = getProgramVariations(program);
+      const variationsNote = triedVariations.length > 0
+        ? ` Tried variations: ${triedVariations.slice(0, 3).join(', ')}${triedVariations.length > 3 ? '...' : ''}`
+        : '';
+
       return res.json({
         tuition_amount: null,
         tuition_period: 'N/A',
@@ -309,7 +393,7 @@ router.post('/extract', validateExtraction, async (req, res) => {
         actual_program_name: null,
         is_stem: false,
         additional_fees: null,
-        remarks: null,
+        remarks: `Program not found at this school.${variationsNote}`,
         confidence_score: 'Low',
         status: 'Not Found',
         source_url: `https://www.google.com/search?q=${encodeURIComponent(school + ' ' + program + ' tuition')}`,
