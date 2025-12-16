@@ -201,10 +201,11 @@ RULES:
 - tuition_amount = TOTAL PROGRAM COST (cost_per_credit × total_credits)
 - Do NOT include the word "total" in tuition_amount, just the dollar amount
 - Use IN-STATE rates, put out-of-state in remarks
+- academic_year = Use 2025-2026 rates if available, otherwise use the most current year
 - If not found on .edu site, status="Not Found"
 
 OUTPUT - Return ONLY this JSON, no other text:
-{"tuition_amount":"$XX,XXX","tuition_period":"full program","academic_year":"2024-2025","cost_per_credit":"$X,XXX","total_credits":"XX","program_length":"X years","actual_program_name":"name","is_stem":false,"additional_fees":null,"remarks":null,"status":"Success"}
+{"tuition_amount":"$XX,XXX","tuition_period":"full program","academic_year":"2025-2026","cost_per_credit":"$X,XXX","total_credits":"XX","program_length":"X years","actual_program_name":"name","is_stem":false,"additional_fees":null,"remarks":null,"status":"Success"}
   `;
 
   const response = await withRetry(
@@ -406,13 +407,25 @@ router.post('/extract', validateExtraction, async (req, res) => {
                 };
             });
 
-        // Simple deduplication
+        // Deduplication by URL and content
         const uniqueUrls = new Set();
+        const uniqueContent = new Set();
         validatedSources = webChunks.filter((item) => {
+            // Skip duplicate URLs
             if (uniqueUrls.has(item.url)) return false;
+
+            // Skip duplicate content (normalize by trimming and lowercasing)
+            const normalizedContent = item.raw_content?.trim().toLowerCase().substring(0, 200) || '';
+            if (normalizedContent.length > 20 && uniqueContent.has(normalizedContent)) {
+                return false;
+            }
+
             uniqueUrls.add(item.url);
+            if (normalizedContent.length > 20) {
+                uniqueContent.add(normalizedContent);
+            }
             return true;
-        }).slice(0, 3); // Keep top 3 actual sources
+        }).slice(0, 3); // Keep top 3 unique sources
         
         logger.info(`Validated sources for ${school} - ${program}`, {
           sources: validatedSources.map(s => ({ title: s.title, url: s.url }))
