@@ -142,7 +142,7 @@ router.get('/metrics', async (req, res) => {
         COUNT(*) as count,
         COUNT(*) FILTER (WHERE status = 'Success') as success_count
       FROM extraction_results
-      WHERE extracted_at > NOW() - INTERVAL '${days} days'
+      WHERE extracted_at > NOW() - ${days} * INTERVAL '1 day'
       GROUP BY DATE(extracted_at)
       ORDER BY date DESC
     `;
@@ -269,7 +269,7 @@ router.delete('/api-logs', async (req, res) => {
 
     const result = await sql`
       DELETE FROM api_logs
-      WHERE created_at < NOW() - INTERVAL '${days} days'
+      WHERE created_at < NOW() - ${days} * INTERVAL '1 day'
     `;
 
     logger.info(`Cleared API logs older than ${days} days`);
@@ -340,7 +340,7 @@ router.get('/ai-usage', async (req, res) => {
         COUNT(*) FILTER (WHERE success = true) as success_count,
         COUNT(*) FILTER (WHERE success = false) as failure_count
       FROM ai_usage_logs
-      WHERE created_at > NOW() - INTERVAL '${days} days'
+      WHERE created_at > NOW() - ${days} * INTERVAL '1 day'
     `;
 
     if (operationType) {
@@ -353,7 +353,7 @@ router.get('/ai-usage', async (req, res) => {
           COUNT(*) FILTER (WHERE success = true) as success_count,
           COUNT(*) FILTER (WHERE success = false) as failure_count
         FROM ai_usage_logs
-        WHERE created_at > NOW() - INTERVAL '${days} days'
+        WHERE created_at > NOW() - ${days} * INTERVAL '1 day'
           AND operation_type = ${operationType}
       `;
     }
@@ -374,7 +374,7 @@ router.get('/ai-usage', async (req, res) => {
           ELSE 0
         END as success_rate
       FROM ai_usage_logs
-      WHERE created_at > NOW() - INTERVAL '${days} days'
+      WHERE created_at > NOW() - ${days} * INTERVAL '1 day'
       GROUP BY operation_type
       ORDER BY calls DESC
     `;
@@ -388,7 +388,7 @@ router.get('/ai-usage', async (req, res) => {
         COALESCE(SUM(total_cost), 0) as cost,
         COUNT(*) FILTER (WHERE success = false) as failures
       FROM ai_usage_logs
-      WHERE created_at > NOW() - INTERVAL '${days} days'
+      WHERE created_at > NOW() - ${days} * INTERVAL '1 day'
       GROUP BY DATE(created_at)
       ORDER BY date DESC
     `;
@@ -401,7 +401,7 @@ router.get('/ai-usage', async (req, res) => {
         COUNT(*) FILTER (WHERE (tool->>'success')::boolean = true) as success_count
       FROM ai_usage_logs,
         jsonb_array_elements(COALESCE(tools_used, '[]'::jsonb)) as tool
-      WHERE created_at > NOW() - INTERVAL '${days} days'
+      WHERE created_at > NOW() - ${days} * INTERVAL '1 day'
         AND tools_used IS NOT NULL
       GROUP BY tool->>'type'
     `;
@@ -412,7 +412,7 @@ router.get('/ai-usage', async (req, res) => {
         COALESCE(error_type, 'unknown') as error_type,
         COUNT(*) as count
       FROM ai_usage_logs
-      WHERE created_at > NOW() - INTERVAL '${days} days'
+      WHERE created_at > NOW() - ${days} * INTERVAL '1 day'
         AND success = false
       GROUP BY error_type
       ORDER BY count DESC
@@ -530,7 +530,7 @@ router.get('/ai-costs', async (req, res) => {
         COALESCE(SUM(tool_cost), 0) as tool_cost,
         COALESCE(SUM(total_cost), 0) as total_cost
       FROM ai_usage_logs
-      WHERE created_at > NOW() - INTERVAL '${days} days'
+      WHERE created_at > NOW() - ${days} * INTERVAL '1 day'
       GROUP BY DATE(created_at), operation_type
       ORDER BY date DESC, operation_type
     `;
@@ -544,7 +544,7 @@ router.get('/ai-costs', async (req, res) => {
         COALESCE(SUM(tool_cost), 0) as tool_cost,
         COALESCE(SUM(total_cost), 0) as total_cost
       FROM ai_usage_logs
-      WHERE created_at > NOW() - INTERVAL '${days} days'
+      WHERE created_at > NOW() - ${days} * INTERVAL '1 day'
       GROUP BY operation_type
       ORDER BY total_cost DESC
     `;
@@ -570,6 +570,63 @@ router.get('/ai-costs', async (req, res) => {
   } catch (error) {
     logger.error('Failed to get AI costs', error);
     res.status(500).json({ error: 'Failed to retrieve AI costs' });
+  }
+});
+
+// ==========================================
+// Extraction Details for LLM Observability
+// ==========================================
+
+/**
+ * GET /api/admin/ai-extraction-details
+ * Get detailed extraction logs with full debug info (prompts/responses)
+ * Used for LLM observability dashboard
+ */
+router.get('/ai-extraction-details', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 10, 20);
+
+    const logs = await sql`
+      SELECT
+        id,
+        endpoint,
+        model,
+        operation_type,
+        input_tokens,
+        output_tokens,
+        total_tokens,
+        tools_used,
+        input_cost,
+        output_cost,
+        tool_cost,
+        total_cost,
+        ai_response_time_ms,
+        retry_count,
+        success,
+        error_type,
+        error_message,
+        request_metadata,
+        response_metadata,
+        created_at
+      FROM ai_usage_logs
+      WHERE operation_type = 'extraction'
+      ORDER BY created_at DESC
+      LIMIT ${limit}
+    `;
+
+    res.json({
+      logs: logs.map(log => ({
+        ...log,
+        input_cost: parseFloat(log.input_cost || 0),
+        output_cost: parseFloat(log.output_cost || 0),
+        tool_cost: parseFloat(log.tool_cost || 0),
+        total_cost: parseFloat(log.total_cost || 0)
+      })),
+      count: logs.length
+    });
+  } catch (error) {
+    logger.error('Failed to get extraction details', error);
+    res.status(500).json({ error: 'Failed to retrieve extraction details' });
   }
 });
 

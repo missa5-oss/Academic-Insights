@@ -40,7 +40,7 @@ export function extractTokenUsage(response) {
 /**
  * Extract tool usage from Gemini API response
  * @param {Object} response - Gemini API response object
- * @returns {Array} Array of tool usage objects
+ * @returns {Array} Array of tool usage objects with source details
  */
 export function extractToolUsage(response) {
   const tools = [];
@@ -48,22 +48,39 @@ export function extractToolUsage(response) {
 
   if (groundingMetadata?.groundingChunks) {
     const chunks = groundingMetadata.groundingChunks;
-    const hasSearchResults = chunks.some(c => c.web?.uri && !c.web.uri.includes('maps'));
-    const hasMapResults = chunks.some(c => c.web?.uri?.includes('maps'));
 
-    if (hasSearchResults) {
+    // Extract search sources (non-maps URLs)
+    const searchSources = chunks
+      .filter(c => c.web?.uri && !c.web.uri.includes('maps'))
+      .map(c => ({
+        url: c.web.uri,
+        title: c.web.title || '',
+        snippet: c.segment?.text || c.web.text || ''
+      }));
+
+    // Extract map sources
+    const mapSources = chunks
+      .filter(c => c.web?.uri?.includes('maps'))
+      .map(c => ({
+        url: c.web.uri,
+        title: c.web.title || ''
+      }));
+
+    if (searchSources.length > 0) {
       tools.push({
         type: 'googleSearch',
-        success: chunks.filter(c => c.web?.uri && !c.web.uri.includes('maps')).length > 0,
-        resultsCount: chunks.filter(c => c.web?.uri && !c.web.uri.includes('maps')).length
+        success: true,
+        resultsCount: searchSources.length,
+        sources: searchSources
       });
     }
 
-    if (hasMapResults) {
+    if (mapSources.length > 0) {
       tools.push({
         type: 'googleMaps',
-        success: chunks.filter(c => c.web?.uri?.includes('maps')).length > 0,
-        resultsCount: chunks.filter(c => c.web?.uri?.includes('maps')).length
+        success: true,
+        resultsCount: mapSources.length,
+        sources: mapSources
       });
     }
   }

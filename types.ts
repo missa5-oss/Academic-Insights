@@ -298,3 +298,144 @@ export interface AdminMetrics {
 export interface MasterDataResult extends ExtractionResult {
   project_name: string;
 }
+
+// ==========================================
+// LLM Observability Types (Admin Dashboard)
+// ==========================================
+
+/**
+ * Source from grounding search
+ */
+export interface GroundingSource {
+  url: string;
+  title: string;
+  snippet?: string;
+}
+
+/**
+ * Tool usage info from AI extraction
+ */
+export interface ToolUsageInfo {
+  type: string;
+  success: boolean;
+  resultsCount?: number;
+  sources?: GroundingSource[];
+}
+
+/**
+ * Request metadata logged for each extraction
+ */
+export interface ExtractionRequestMetadata {
+  school: string;
+  program: string;
+}
+
+/**
+ * Response metadata logged for each extraction
+ */
+export interface ExtractionResponseMetadata {
+  status: string;
+  confidence_score?: string;
+  has_tuition?: boolean;
+  sources_count?: number;
+  verification_status?: string;
+  verification_issues?: number;
+  program_variation_used?: string;
+}
+
+/**
+ * Detailed extraction log for LLM observability dashboard
+ */
+export interface ExtractionLog {
+  id: string;
+  endpoint: string;
+  model: string;
+  operation_type: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  tools_used: ToolUsageInfo[] | null;
+  input_cost: number;
+  output_cost: number;
+  tool_cost: number;
+  total_cost: number;
+  ai_response_time_ms: number;
+  retry_count: number;
+  success: boolean;
+  error_type?: string;
+  error_message?: string;
+  request_metadata: ExtractionRequestMetadata;
+  response_metadata: ExtractionResponseMetadata;
+  created_at: string;
+}
+
+/**
+ * AI Usage metrics summary for dashboard
+ */
+export interface AiUsageSummary {
+  total_calls: number;
+  total_tokens: number;
+  total_cost: number;
+  avg_response_time: number;
+  success_count: number;
+  failure_count: number;
+}
+
+/**
+ * AI Usage breakdown by operation type
+ */
+export interface AiUsageByOperation {
+  operation_type: string;
+  calls: number;
+  tokens: number;
+  cost: number;
+  avg_response_time: number;
+  success_rate: number;
+}
+
+/**
+ * Complete AI Usage metrics response
+ */
+export interface AiUsageMetrics {
+  summary: AiUsageSummary;
+  byOperation: AiUsageByOperation[];
+  daily: Array<{
+    date: string;
+    calls: number;
+    tokens: number;
+    cost: number;
+    failures: number;
+  }>;
+  toolUsage: Array<{
+    tool_type: string;
+    usage_count: number;
+    success_count: number;
+  }>;
+  errors: Array<{
+    error_type: string;
+    count: number;
+  }>;
+  period: string;
+}
+
+/**
+ * AI Cost breakdown response
+ */
+export interface AiCostBreakdown {
+  costs: Array<{
+    date: string;
+    operation_type: string;
+    input_cost: number;
+    output_cost: number;
+    tool_cost: number;
+    total_cost: number;
+  }>;
+  totalsByOperation: Array<{
+    operation_type: string;
+    input_cost: number;
+    output_cost: number;
+    tool_cost: number;
+    total_cost: number;
+  }>;
+  period: string;
+}
