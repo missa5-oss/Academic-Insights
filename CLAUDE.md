@@ -139,6 +139,13 @@ Key rules:
 - AI calculates: cost_per_credit × total_credits
 - Always verify against source in Audit Modal
 
+### Future: Google ADK Migration (Phase 4+)
+- Currently using low-level `@google/genai` SDK for direct API control
+- Plan to migrate to **Google Agent Development Kit (ADK)** for structured agentic workflows
+- ADK provides: multi-turn agent orchestration, built-in tool management, visual debugging UI, observability
+- Benefits: Cleaner verification agent code, better session management, improved observability
+- Status: Planned for future phase after current agentic extraction system is stable
+
 ## Testing & Debugging
 
 **Tests**: `npm run test:run` (Vitest + React Testing Library)
