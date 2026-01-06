@@ -9,12 +9,14 @@ Guidance for Claude Code when working on Academic-Insights repository.
 ## Core Features
 
 - **Project Management**: Create, edit, delete tuition research projects
-- **AI-Powered Extraction**: Gemini + Google Search grounding extracts tuition from .edu sites
+- **AI-Powered Extraction**: Gemini 2.5 Flash + Google Search grounding extracts tuition from .edu sites
 - **Data Validation**: Program existence verification, confidence scoring (High/Medium/Low)
+- **Agentic Verification**: Rule-based + AI verification with retry logic for program name variations
 - **Market Analysis**: Real-time dashboards with statistics, trends, and export (CSV/JSON)
 - **Historical Tracking**: Version history for price changes and trends
 - **Data Audit**: Validated sources, page content snippets, audit trails
-- **AI Chat**: Project-scoped questions about extracted data (streaming SSE)
+- **AI Chat**: Project-scoped questions with conversation persistence (streaming SSE)
+- **Admin Observability**: System health, API analytics, LLM extraction audit logs
 - **Authentication**: Simple role-based access (Admin/Analyst)
 - **Database**: Neon PostgreSQL with real-time sync, pagination, filtering
 
@@ -48,7 +50,7 @@ curl http://localhost:3001/api/projects       # API responding?
 - **Frontend**: React 19 + TypeScript + Vite
 - **Backend**: Express.js with Neon PostgreSQL
 - **Routing**: React Router v7 (HashRouter)
-- **AI**: Google Gemini API (@google/genai)
+- **AI**: Google Gemini 2.5 Flash (@google/genai v1.31)
 - **State**: React Context API + API persistence
 - **UI**: Lucide icons, Recharts, Tailwind CSS
 
@@ -71,30 +73,46 @@ curl http://localhost:3001/api/projects       # API responding?
 ### Key Files
 
 **Frontend**:
-- `App.tsx` - Router, route guards
-- `context/AppContext.tsx` - Global state + API calls
-- `services/geminiService.ts` - Gemini API integration
-- `pages/` - Login, Dashboard, ProjectDetail, AdminPanel
-- `components/` - AuditModal, HistoryModal, ChatAssistant, etc.
-- `types.ts` - TypeScript interfaces
+- `src/App.tsx` - Router, route guards
+- `src/context/AppContext.tsx` - Global state + API calls
+- `src/services/geminiService.ts` - Gemini API integration
+- `src/pages/` - Login, Dashboard, ProjectDetail, AdminPanel
+- `src/components/` - AuditModal, HistoryModal, ChatAssistant, ConfirmDialog, etc.
+- `src/utils/` - csv.ts, date.ts, api.ts utility modules
+- `src/types.ts` - TypeScript interfaces
 
 **Backend**:
-- `server/index.js` - Express server
-- `server/db.js` - Database setup
+- `server/index.js` - Express server with security middleware
+- `server/db.js` - Database setup with auto-migrations
+- `server/config.js` - Centralized config (Gemini, rate limits, CORS)
 - `server/routes/gemini.js` - Extraction + verification agent
+- `server/routes/admin.js` - Admin observability endpoints
+- `server/routes/conversations.js` - Chat persistence
 - `server/agents/verifierAgent.js` - Data validation logic
-- `server/config.js` - Centralized config
+- `server/middleware/apiLogger.js` - Request logging middleware
+- `server/utils/aiLogger.js` - LLM extraction audit logging
 
 ### Data Models
 
 **ExtractionResult**: School/program extraction
-- Fields: tuition_amount, cost_per_credit, total_credits, program_length_months, is_stem, confidence_score, status
+- Core: tuition_amount, cost_per_credit, total_credits, program_length_months, is_stem
 - Status: Pending, Success, Not Found, Failed
 - Confidence: High, Medium, Low
-- Verification: Math check, source check, completeness, plausibility, AI verification
+- Verification: verification_data (JSONB), verification_status, retry_count
+- Audit: validated_sources (JSONB), raw_content, actual_program_name
+- History: extraction_version, extracted_at, updated_at
+- User: is_flagged, user_comments
 
 **Project**: Container for extractions
 - Fields: name, description, created_at, last_run, status, results_count
+
+**Conversation**: Chat session
+- Fields: id, project_id, title, message_count, last_message_at, created_at
+- Messages: conversation_messages (role, content, tokens_used)
+
+**AdminObservability**: System monitoring
+- api_logs: HTTP request tracking (method, path, status, duration, IP)
+- ai_extraction_logs: LLM call audit (tokens, cost, model, success/failure)
 
 ### Environment Variables
 
@@ -175,13 +193,111 @@ node server/check-sources.js           # Recent extractions
 
 ## Database
 
-**Tables**: projects, extraction_results
-- Version tracking via `extraction_version` column
-- Historical data: multiple rows per school/program
+**Schema** (9 tables):
+1. **projects** - Research project containers
+2. **extraction_results** - Tuition data extractions (version tracking, verification)
+3. **conversations** - Chat session metadata
+4. **conversation_messages** - Chat message history
+5. **project_summaries** - AI summary caching (24hr TTL)
+6. **project_analysis_history** - Persistent analysis storage
+7. **api_logs** - HTTP request audit trail (Sprint 3)
+8. **ai_extraction_logs** - LLM call tracking with token/cost metrics (Sprint 3)
+9. **ai_chat_logs** - Chat LLM call audit (Sprint 3)
+
+**Key Features**:
+- Version tracking via `extraction_version` column (historical tuition data)
 - Auto-migration on server start via `server/db.js`
+- Comprehensive indexes for performance (status, confidence, date, verification)
+- JSONB columns for flexible metadata (validated_sources, verification_data)
+
+## Admin Observability (Sprint 3)
+
+**AdminPanel Features**:
+- **System Health**: Uptime, memory usage, CPU load, database latency
+- **Database Stats**: Row counts for all tables
+- **API Analytics**: Request volume, response times, error rates, top endpoints
+- **LLM Audit Dashboard**:
+  - Extraction logs with token usage, costs, success/failure tracking
+  - Detailed extraction metadata (school, program, model, verification status)
+  - Filter by date range, success status, verification status
+  - Export audit data for analysis
+- **Recent Errors**: Last 5 API errors with stack traces
+- **Auto-refresh**: 30-second polling interval
+
+**Endpoints** (`/api/admin/*`):
+- `GET /health` - Detailed health check with component status
+- `GET /metrics` - System metrics (projects, results, API analytics)
+- `GET /api-logs` - HTTP request logs (filterable, paginated)
+- `GET /errors` - Recent error responses
+- `GET /database-stats` - Table row counts
+- `GET /ai-logs` - LLM extraction audit logs (Sprint 3)
+- `DELETE /api-logs` - Clear old logs
+
+**Observability Stack**:
+- `server/middleware/apiLogger.js` - Non-blocking HTTP request logging
+- `server/utils/aiLogger.js` - LLM call tracking (tokens, cost, latency)
+- `server/utils/logger.js` - Structured console logging
+
+## Utility Modules (Sprint 4)
+
+**CSV Utilities** (`src/utils/csv.ts`):
+- `toCSV()`, `downloadCSV()`, `parseCSV()`, `escapeCSV()`
+
+**Date Utilities** (`src/utils/date.ts`):
+- `formatDate()`, `getRelativeTime()`, `getAcademicYear()`, `daysAgo()`
+
+**API Utilities** (`src/utils/api.ts`):
+- `apiRequest()`, `get()`, `post()`, `put()`, `del()` - Standardized fetch wrappers
+
+## Patterns & Conventions
+
+**Backend Configuration** (`server/config.js`):
+- All env-dependent values centralized
+- `GEMINI_CONFIG.MODEL` = 'gemini-2.5-flash'
+- Rate limits: 500 req/15min (general), 100 req/15min (AI)
+- CORS origins configurable via `ALLOWED_ORIGINS` env var
+
+**Error Handling**:
+- `withRetry()` utility for transient API failures (exponential backoff)
+- Structured error logging via `logger.error()`
+- API responses include proper HTTP status codes + error messages
+
+**Database Migrations**:
+- Auto-run on server start via `initializeDatabase()`
+- Use `ALTER TABLE IF NOT EXISTS` for backward compatibility
+- Migrations logged via `logger.info()` / `logger.debug()`
+
+**LLM Cost Tracking**:
+- Gemini 2.5 Flash: $0.075 per 1M input tokens, $0.30 per 1M output
+- Google Search grounding: $5.00 per 1K queries
+- Tracked in `ai_extraction_logs` table via `aiLogger.logExtraction()`
+
+**TypeScript**:
+- All types defined in `src/types.ts`
+- Use strict mode (`tsconfig.json`)
+- Prefer interfaces over types for object shapes
+
+## Recent Development Status
+
+**Current Version**: v1.4.0 (January 2026)
+
+**Completed Sprints**:
+- ✅ **Phase 1-2**: Agentic extraction with verification agent + program variations retry (Dec 16, 2025)
+- ✅ **Sprint 2**: AI features enhancement - Chat persistence, summary caching (Dec 2025)
+- ✅ **Sprint 3**: Admin observability - LLM audit dashboard, API logging, system health (Dec 12, 2025)
+- ✅ **Sprint 4**: Performance & polish - Utility modules, TypeScript completion, search optimization (Dec 12, 2025)
+
+**Key Learnings**:
+- Gemini grounding chunks sometimes empty (~20% of cases) - always provide fallback summary
+- `program_length_months` must be numeric (not "2 years") for analytics
+- Verification agent reduces low-confidence extractions by flagging issues early
+- LLM cost tracking essential for budget management ($0.075-$0.30 per 1M tokens)
+
+**Active Branch**: `feature/agentic-extraction` (verified data quality improvements)
 
 ## Documentation
 
 - **Architecture**: [docs/AGENTIC_EXTRACTION_ARCHITECTURE.md](docs/AGENTIC_EXTRACTION_ARCHITECTURE.md) - Mermaid diagrams
 - **Implementation**: [server/agents/verifierAgent.js](server/agents/verifierAgent.js) - Verification logic
-- **Roadmaps**: See `/Users/mahmoudissa/.claude/plans/`
+- **Changelog**: [CHANGELOG.md](CHANGELOG.md) - Version history (currently v1.4.0)
+- **README**: [README.md](README.md) - User-facing project overview
