@@ -312,14 +312,14 @@ node server/check-sources.js           # Recent extractions
 
 ## Recent Development Status
 
-**Current Version**: v1.5.0 (January 2026)
+**Current Version**: v1.5.0 (January 27, 2026)
 
 **Completed Sprints**:
 - ✅ **Phase 1-2**: Agentic extraction with verification agent + program variations retry (Dec 16, 2025)
 - ✅ **Sprint 2**: AI features enhancement - Chat persistence, summary caching (Dec 2025)
 - ✅ **Sprint 3**: Admin observability - LLM audit dashboard, API logging, system health (Dec 12, 2025)
 - ✅ **Sprint 4**: Performance & polish - Utility modules, TypeScript completion, search optimization (Dec 12, 2025)
-- ✅ **Sprint 5**: Database & Backend Performance - Bulk insert optimization, caching, materialized views, query monitoring (Jan 7, 2026)
+- ✅ **Sprint 5**: Database & Backend Performance - Bulk insert optimization, caching, materialized views, query monitoring (Jan 27, 2026) ✅ COMPLETE
 
 **Key Learnings**:
 - Gemini grounding chunks sometimes empty (~20% of cases) - always provide fallback summary
@@ -331,9 +331,9 @@ node server/check-sources.js           # Recent extractions
 - **Sprint 5**: Materialized views provide fast pre-computed aggregations for analytics queries
 - **Sprint 5**: Composite indexes significantly improve filtered query performance on large datasets
 
-**Active Branch**: `feature/agentic-extraction` (verified data quality improvements)
+**Active Branch**: `main` (Sprint 5 performance optimizations merged)
 
-**Sprint 5 Performance Improvements** (January 2026):
+**Sprint 5 Performance Improvements** (January 27, 2026) ✅ COMPLETE:
 - ✅ Bulk insert optimization: N+1 query pattern eliminated (100 items: 10-15s → <2s)
 - ✅ Database indexes: Added 3 composite indexes for common query patterns
 - ✅ Response caching: Analytics endpoint cached with 5-minute TTL and automatic invalidation
