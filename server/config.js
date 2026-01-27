@@ -26,7 +26,7 @@ export const PORT = process.env.PORT || 3001;
 export const GEMINI_CONFIG = {
   API_KEY: process.env.GEMINI_API_KEY,
   MODEL: 'gemini-2.5-flash',
-  TEMPERATURE: 0.7,
+  TEMPERATURE: 1.0, // Google recommends 1.0 for grounding tools (optimal search query generation)
   MAX_TOKENS: 4096,
 };
 

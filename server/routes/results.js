@@ -2,6 +2,9 @@ import express from 'express';
 import { sql } from '../db.js';
 import { validateResult, validateBulkResults, validateBulkDelete } from '../middleware/validation.js';
 import logger from '../utils/logger.js';
+import { cache, getAnalyticsCacheKey, invalidateAnalyticsCache, setCacheHeaders } from '../utils/cache.js';
+import { refreshProjectAnalyticsForProject } from '../utils/materializedView.js';
+import crypto from 'crypto';
 
 const router = express.Router();
 
@@ -152,6 +155,13 @@ router.post('/', validateResult, async (req, res) => {
       RETURNING *
     `;
 
+    // Sprint 5: Invalidate analytics cache and refresh materialized view
+    invalidateAnalyticsCache(project_id);
+    // Refresh materialized view asynchronously (don't block response)
+    refreshProjectAnalyticsForProject(project_id).catch(err => 
+      logger.warn('Failed to refresh materialized view', err)
+    );
+
     res.status(201).json(result);
   } catch (error) {
     logger.error('Error creating result', error);
@@ -164,36 +174,77 @@ router.post('/bulk', validateBulkResults, async (req, res) => {
   try {
     const { results } = req.body;
 
-    const created = [];
-    for (const result of results) {
-      const {
+    // Optimized: Single bulk insert instead of N+1 pattern
+    // Use PostgreSQL's array-based bulk insert with UNNEST
+    if (results.length === 0) {
+      return res.status(201).json([]);
+    }
+
+    // Prepare arrays for bulk insert using UNNEST
+    const ids = results.map(r => r.id);
+    const projectIds = results.map(r => r.project_id);
+    const schoolNames = results.map(r => r.school_name);
+    const programNames = results.map(r => r.program_name);
+    const tuitionAmounts = results.map(r => r.tuition_amount);
+    const tuitionPeriods = results.map(r => r.tuition_period);
+    const academicYears = results.map(r => r.academic_year);
+    const costPerCredits = results.map(r => r.cost_per_credit);
+    const totalCredits = results.map(r => r.total_credits);
+    const programLengths = results.map(r => r.program_length);
+    const remarksList = results.map(r => r.remarks);
+    const locationDataList = results.map(r => r.location_data ? JSON.stringify(r.location_data) : null);
+    const confidenceScores = results.map(r => r.confidence_score);
+    const statuses = results.map(r => r.status);
+    const sourceUrls = results.map(r => r.source_url);
+    const validatedSourcesList = results.map(r => r.validated_sources ? JSON.stringify(r.validated_sources) : '[]');
+    const extractionDates = results.map(r => r.extraction_date);
+    const rawContents = results.map(r => r.raw_content);
+    const actualProgramNames = results.map(r => r.actual_program_name || null);
+    const userCommentsList = results.map(r => r.user_comments || null);
+
+    // Execute bulk insert using UNNEST (PostgreSQL array pattern)
+    // This is much faster than individual inserts
+    const created = await sql`
+      INSERT INTO extraction_results (
         id, project_id, school_name, program_name, tuition_amount,
         tuition_period, academic_year, cost_per_credit, total_credits,
         program_length, remarks, location_data, confidence_score,
         status, source_url, validated_sources, extraction_date, raw_content,
         actual_program_name, user_comments
-      } = result;
+      )
+      SELECT
+        unnest(${ids}::text[]) as id,
+        unnest(${projectIds}::text[]) as project_id,
+        unnest(${schoolNames}::text[]) as school_name,
+        unnest(${programNames}::text[]) as program_name,
+        unnest(${tuitionAmounts}::text[]) as tuition_amount,
+        unnest(${tuitionPeriods}::text[]) as tuition_period,
+        unnest(${academicYears}::text[]) as academic_year,
+        unnest(${costPerCredits}::text[]) as cost_per_credit,
+        unnest(${totalCredits}::text[]) as total_credits,
+        unnest(${programLengths}::text[]) as program_length,
+        unnest(${remarksList}::text[]) as remarks,
+        NULLIF(unnest(${locationDataList}::text[]), 'null')::jsonb as location_data,
+        unnest(${confidenceScores}::text[]) as confidence_score,
+        unnest(${statuses}::text[]) as status,
+        unnest(${sourceUrls}::text[]) as source_url,
+        unnest(${validatedSourcesList}::text[])::jsonb as validated_sources,
+        unnest(${extractionDates}::text[]) as extraction_date,
+        unnest(${rawContents}::text[]) as raw_content,
+        unnest(${actualProgramNames}::text[]) as actual_program_name,
+        unnest(${userCommentsList}::text[]) as user_comments
+      RETURNING *
+    `;
 
-      const [inserted] = await sql`
-        INSERT INTO extraction_results (
-          id, project_id, school_name, program_name, tuition_amount,
-          tuition_period, academic_year, cost_per_credit, total_credits,
-          program_length, remarks, location_data, confidence_score,
-          status, source_url, validated_sources, extraction_date, raw_content,
-          actual_program_name, user_comments
-        )
-        VALUES (
-          ${id}, ${project_id}, ${school_name}, ${program_name}, ${tuition_amount},
-          ${tuition_period}, ${academic_year}, ${cost_per_credit}, ${total_credits},
-          ${program_length}, ${remarks}, ${JSON.stringify(location_data)}, ${confidence_score},
-          ${status}, ${source_url}, ${JSON.stringify(validated_sources)}, ${extraction_date}, ${raw_content},
-          ${actual_program_name || null}, ${user_comments || null}
-        )
-        RETURNING *
-      `;
-
-      created.push(inserted);
-    }
+    // Sprint 5: Invalidate analytics cache and refresh materialized view for affected projects
+    const affectedProjectIds = [...new Set(results.map(r => r.project_id))];
+    affectedProjectIds.forEach(projectId => {
+      invalidateAnalyticsCache(projectId);
+      // Refresh materialized view asynchronously
+      refreshProjectAnalyticsForProject(projectId).catch(err => 
+        logger.warn('Failed to refresh materialized view', err)
+      );
+    });
 
     res.status(201).json(created);
   } catch (error) {
@@ -247,6 +298,12 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Result not found' });
     }
 
+    // Sprint 5: Invalidate analytics cache and refresh materialized view
+    invalidateAnalyticsCache(result.project_id);
+    refreshProjectAnalyticsForProject(result.project_id).catch(err => 
+      logger.warn('Failed to refresh materialized view', err)
+    );
+
     res.json(result);
   } catch (error) {
     logger.error('Error updating result', error);
@@ -267,6 +324,12 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Result not found' });
     }
 
+    // Sprint 5: Invalidate analytics cache and refresh materialized view
+    invalidateAnalyticsCache(deleted.project_id);
+    refreshProjectAnalyticsForProject(deleted.project_id).catch(err => 
+      logger.warn('Failed to refresh materialized view', err)
+    );
+
     res.json({ message: 'Result deleted successfully', id: deleted.id, project_id: deleted.project_id });
   } catch (error) {
     logger.error('Error deleting result', error);
@@ -284,6 +347,15 @@ router.post('/bulk-delete', validateBulkDelete, async (req, res) => {
       WHERE id = ANY(${ids})
       RETURNING id, project_id
     `;
+
+    // Sprint 5: Invalidate analytics cache and refresh materialized view for affected projects
+    const affectedProjectIds = [...new Set(deleted.map(d => d.project_id))];
+    affectedProjectIds.forEach(projectId => {
+      invalidateAnalyticsCache(projectId);
+      refreshProjectAnalyticsForProject(projectId).catch(err => 
+        logger.warn('Failed to refresh materialized view', err)
+      );
+    });
 
     res.json({
       message: `${deleted.length} results deleted successfully`,
@@ -447,9 +519,39 @@ router.post('/:id/new-version', async (req, res) => {
 });
 
 // GET analytics data for a project (US1.1 - Statistics Cards)
+// Sprint 5: Performance Optimization - Added response caching
 router.get('/analytics/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
+
+    // Generate data hash to detect changes (for cache invalidation)
+    // Hash is based on count and last update timestamp
+    const [dataHashRow] = await sql`
+      SELECT 
+        COUNT(*) as count,
+        MAX(extracted_at) as last_update
+      FROM extraction_results
+      WHERE project_id = ${projectId}
+    `;
+    
+    const dataHash = crypto
+      .createHash('md5')
+      .update(`${dataHashRow.count}-${dataHashRow.last_update}`)
+      .digest('hex');
+
+    const cacheKey = getAnalyticsCacheKey(projectId, dataHash);
+    
+    // Check cache first
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      setCacheHeaders(res, 300);
+      res.set('X-Cache-Status', 'HIT');
+      return res.json(cached);
+    }
+
+    // Cache miss - fetch from database
+    setCacheHeaders(res, 300);
+    res.set('X-Cache-Status', 'MISS');
 
     // Get all successful results with tuition data
     const results = await sql`
@@ -467,8 +569,10 @@ router.get('/analytics/:projectId', async (req, res) => {
       ORDER BY extraction_date DESC
     `;
 
+    let analyticsData;
+
     if (results.length === 0) {
-      return res.json({
+      analyticsData = {
         avgTuition: 0,
         highestTuition: null,
         lowestTuition: null,
@@ -477,73 +581,78 @@ router.get('/analytics/:projectId', async (req, res) => {
         stemPrograms: 0,
         nonStemPrograms: 0,
         totalResults: 0
-      });
+      };
+    } else {
+      // Parse tuition amounts and calculate metrics
+      const tuitionValues = results
+        .map(r => {
+          const parsed = parseFloat(r.tuition_amount.replace(/[^0-9.]/g, '') || '0');
+          return { ...r, parsedAmount: parsed };
+        })
+        .filter(r => r.parsedAmount > 0);
+
+      if (tuitionValues.length === 0) {
+        analyticsData = {
+          avgTuition: 0,
+          highestTuition: null,
+          lowestTuition: null,
+          totalPrograms: results.length,
+          successRate: 0,
+          stemPrograms: results.filter(r => r.is_stem).length,
+          nonStemPrograms: results.filter(r => !r.is_stem).length,
+          totalResults: results.length
+        };
+      } else {
+        // Calculate statistics
+        const sum = tuitionValues.reduce((acc, r) => acc + r.parsedAmount, 0);
+        const avgTuition = Math.round(sum / tuitionValues.length);
+
+        const highest = tuitionValues.reduce((max, r) =>
+          r.parsedAmount > max.parsedAmount ? r : max
+        );
+
+        const lowest = tuitionValues.reduce((min, r) =>
+          r.parsedAmount < min.parsedAmount ? r : min
+        );
+
+        // Get total results for this project to calculate success rate
+        const [totalCount] = await sql`
+          SELECT COUNT(*) as count FROM extraction_results
+          WHERE project_id = ${projectId}
+        `;
+        const totalResults = parseInt(totalCount.count);
+        const successCount = results.length;
+        const successRate = totalResults > 0 ? Math.round((successCount / totalResults) * 100) : 0;
+
+        // Count STEM vs non-STEM
+        const stemPrograms = results.filter(r => r.is_stem).length;
+        const nonStemPrograms = results.filter(r => !r.is_stem).length;
+
+        analyticsData = {
+          avgTuition,
+          highestTuition: {
+            amount: highest.tuition_amount,
+            school: highest.school_name,
+            program: highest.program_name
+          },
+          lowestTuition: {
+            amount: lowest.tuition_amount,
+            school: lowest.school_name,
+            program: lowest.program_name
+          },
+          totalPrograms: results.length,
+          successRate,
+          stemPrograms,
+          nonStemPrograms,
+          totalResults
+        };
+      }
     }
 
-    // Parse tuition amounts and calculate metrics
-    const tuitionValues = results
-      .map(r => {
-        const parsed = parseFloat(r.tuition_amount.replace(/[^0-9.]/g, '') || '0');
-        return { ...r, parsedAmount: parsed };
-      })
-      .filter(r => r.parsedAmount > 0);
-
-    if (tuitionValues.length === 0) {
-      return res.json({
-        avgTuition: 0,
-        highestTuition: null,
-        lowestTuition: null,
-        totalPrograms: results.length,
-        successRate: 0,
-        stemPrograms: results.filter(r => r.is_stem).length,
-        nonStemPrograms: results.filter(r => !r.is_stem).length,
-        totalResults: results.length
-      });
-    }
-
-    // Calculate statistics
-    const sum = tuitionValues.reduce((acc, r) => acc + r.parsedAmount, 0);
-    const avgTuition = Math.round(sum / tuitionValues.length);
-
-    const highest = tuitionValues.reduce((max, r) =>
-      r.parsedAmount > max.parsedAmount ? r : max
-    );
-
-    const lowest = tuitionValues.reduce((min, r) =>
-      r.parsedAmount < min.parsedAmount ? r : min
-    );
-
-    // Get total results for this project to calculate success rate
-    const [totalCount] = await sql`
-      SELECT COUNT(*) as count FROM extraction_results
-      WHERE project_id = ${projectId}
-    `;
-    const totalResults = parseInt(totalCount.count);
-    const successCount = results.length;
-    const successRate = totalResults > 0 ? Math.round((successCount / totalResults) * 100) : 0;
-
-    // Count STEM vs non-STEM
-    const stemPrograms = results.filter(r => r.is_stem).length;
-    const nonStemPrograms = results.filter(r => !r.is_stem).length;
-
-    res.json({
-      avgTuition,
-      highestTuition: {
-        amount: highest.tuition_amount,
-        school: highest.school_name,
-        program: highest.program_name
-      },
-      lowestTuition: {
-        amount: lowest.tuition_amount,
-        school: lowest.school_name,
-        program: lowest.program_name
-      },
-      totalPrograms: results.length,
-      successRate,
-      stemPrograms,
-      nonStemPrograms,
-      totalResults
-    });
+    // Cache the result for 5 minutes
+    cache.set(cacheKey, analyticsData, 5 * 60 * 1000);
+    
+    res.json(analyticsData);
   } catch (error) {
     logger.error('Error fetching analytics data', error);
     res.status(500).json({ error: 'Failed to fetch analytics data' });

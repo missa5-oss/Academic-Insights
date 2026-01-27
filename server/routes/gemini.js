@@ -173,6 +173,30 @@ function formatCurrency(value) {
     return '$' + strValue;
 }
 
+/**
+ * Extract actual URL from Google redirect
+ * Handles: google.com/url?q=TARGET&sa=...
+ * Phase 1 Improvement: Resolve ~20% of grounding chunks that return redirects
+ */
+function resolveGoogleRedirect(url) {
+    if (!url || !url.includes('google.com/url')) {
+        return url;
+    }
+
+    try {
+        const urlObj = new URL(url);
+        const targetUrl = urlObj.searchParams.get('q');
+        if (targetUrl && isValidUrl(targetUrl)) {
+            logger.debug(`Resolved redirect: ${url} → ${targetUrl}`);
+            return targetUrl;
+        }
+    } catch (e) {
+        logger.warn(`Failed to resolve redirect: ${url}`, { error: e.message });
+    }
+
+    return url;
+}
+
 // Initialize Gemini client
 const getClient = () => {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -473,10 +497,11 @@ router.post('/extract', validateExtraction, async (req, res) => {
                 // Get the original index from the full groundingChunks array
                 const originalIndex = groundingChunkIndexMap.get(c.web.uri);
 
-                // Extract actual page text content from supporting chunks
+                // Extract actual page text content with prioritized sources
+                // Phase 1 Improvement: Prioritize groundingSupports for better quality
                 let rawContent = '';
 
-                // Method 1: Get text from supporting chunks (actual page content)
+                // Priority 1: groundingSupports segments (best quality - actual page content)
                 if (supportingChunks && supportingChunks.length > 0) {
                     const relevantSupports = supportingChunks.filter(s =>
                         s.groundingChunkIndices?.includes(originalIndex)
@@ -490,18 +515,21 @@ router.post('/extract', validateExtraction, async (req, res) => {
 
                         if (pageText && pageText.length > 10) {
                             rawContent = pageText;
+                            logger.debug(`Using groundingSupports (${pageText.length} chars) for ${c.web.uri}`);
                         }
                     }
                 }
 
-                // Method 2: Fallback to web chunk text if available
-                if (!rawContent && c.web?.text && c.web.text.trim().length > 10) {
-                    rawContent = c.web.text.trim();
-                }
-
-                // Method 3: Fallback to segment text
+                // Priority 2: Fallback to segment.text if available
                 if (!rawContent && c.segment?.text && c.segment.text.trim().length > 10) {
                     rawContent = c.segment.text.trim();
+                    logger.debug(`Using segment.text fallback for ${c.web.uri}`);
+                }
+
+                // Priority 3: Last resort - web.text (least reliable)
+                if (!rawContent && c.web?.text && c.web.text.trim().length > 10) {
+                    rawContent = c.web.text.trim();
+                    logger.warn(`Using web.text fallback (may be incomplete) for ${c.web.uri}`);
                 }
 
                 // Limit content length (reserve space for truncation message)
@@ -515,7 +543,7 @@ router.post('/extract', validateExtraction, async (req, res) => {
 
                 return {
                     title: c.web.title || 'Official Source',
-                    url: c.web.uri,
+                    url: resolveGoogleRedirect(c.web.uri), // Phase 1: Resolve Google redirects to actual .edu URLs
                     raw_content: rawContent || `No extractable text content found from ${c.web.uri}. Please visit the URL directly to verify the data.`
                 };
             });
