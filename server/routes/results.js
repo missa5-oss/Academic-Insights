@@ -5,6 +5,7 @@ import logger from '../utils/logger.js';
 import { cache, getAnalyticsCacheKey, invalidateAnalyticsCache, setCacheHeaders } from '../utils/cache.js';
 import { refreshProjectAnalyticsForProject } from '../utils/materializedView.js';
 import crypto from 'crypto';
+import quotaGuard from '../middleware/quotaGuard.js';
 
 const router = express.Router();
 
@@ -170,7 +171,7 @@ router.post('/', validateResult, async (req, res) => {
 });
 
 // POST bulk create results
-router.post('/bulk', validateBulkResults, async (req, res) => {
+router.post('/bulk', validateBulkResults, quotaGuard, async (req, res) => {
   try {
     const { results } = req.body;
 
@@ -178,6 +179,27 @@ router.post('/bulk', validateBulkResults, async (req, res) => {
     // Use PostgreSQL's array-based bulk insert with UNNEST
     if (results.length === 0) {
       return res.status(201).json([]);
+    }
+
+    // Phase 3: Check if we have enough quota for this bulk operation
+    const { getQuotaStatus } = await import('../utils/quotaTracker.js');
+    const estimatedQueries = results.length; // Each result typically requires 1 search
+    const quotaStatus = await getQuotaStatus();
+
+    if (quotaStatus && quotaStatus.remaining < estimatedQueries) {
+      logger.warn('Insufficient quota for bulk operation', {
+        required: estimatedQueries,
+        remaining: quotaStatus.remaining
+      });
+      return res.status(429).json({
+        error: 'Insufficient quota for bulk operation',
+        message: `This operation requires approximately ${estimatedQueries} queries, but only ${quotaStatus.remaining} remain today. Please reduce the batch size or try again tomorrow.`,
+        quotaStatus: {
+          used: quotaStatus.used,
+          limit: quotaStatus.limit,
+          remaining: quotaStatus.remaining
+        }
+      });
     }
 
     // Prepare arrays for bulk insert using UNNEST

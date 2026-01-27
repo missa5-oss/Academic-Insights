@@ -11,6 +11,7 @@ import { sql } from '../db.js';
 import logger from '../utils/logger.js';
 import { APP_VERSION } from '../config.js';
 import { getApiAnalytics } from '../middleware/apiLogger.js';
+import { getQueryStats, getSlowQueries, resetStats } from '../utils/queryPerformance.js';
 
 const router = express.Router();
 
@@ -70,6 +71,19 @@ router.get('/health', async (req, res) => {
   if (health.components.system.memory.usagePercent > 90) {
     health.status = 'degraded';
     health.components.system.status = 'warning';
+  }
+
+  // Sprint 5: Add query performance stats to health check
+  try {
+    const queryStats = getQueryStats();
+    health.components.database.queryPerformance = {
+      totalQueries: queryStats.totalQueries,
+      averageDuration: queryStats.averageDuration,
+      slowQueries: queryStats.slowQueries,
+      slowQueryPercentage: queryStats.slowQueryPercentage,
+    };
+  } catch (error) {
+    logger.debug('Failed to get query performance stats for health check', error);
   }
 
   health.responseTime = Date.now() - startTime;
@@ -184,6 +198,65 @@ router.get('/metrics', async (req, res) => {
 });
 
 /**
+ * GET /api/admin/quota
+ * Get Google Search quota status and history
+ * Phase 3: Quota Management
+ */
+router.get('/quota', async (req, res) => {
+  try {
+    const { getQuotaStatus, getQuotaHistory } = await import('../utils/quotaTracker.js');
+
+    // Get current quota status
+    const currentStatus = await getQuotaStatus();
+
+    // Get 30 days of history for trend analysis
+    const history = await getQuotaHistory(30);
+
+    // Calculate statistics
+    const avgDaily = history.length > 0
+      ? Math.round(history.reduce((sum, day) => sum + day.queries_used, 0) / history.length)
+      : 0;
+
+    const maxDaily = history.length > 0
+      ? Math.max(...history.map(day => day.queries_used))
+      : 0;
+
+    const minDaily = history.length > 0
+      ? Math.min(...history.map(day => day.queries_used))
+      : 0;
+
+    // Determine status level for UI
+    let statusLevel = 'healthy'; // Green
+    if (currentStatus && currentStatus.usagePercent >= 95) {
+      statusLevel = 'critical'; // Red
+    } else if (currentStatus && currentStatus.usagePercent >= 80) {
+      statusLevel = 'warning'; // Yellow
+    }
+
+    res.json({
+      current: currentStatus || {
+        used: 0,
+        limit: 1000000,
+        remaining: 1000000,
+        usagePercent: 0,
+        isExceeded: false
+      },
+      statistics: {
+        averageDailyUsage: avgDaily,
+        maxDailyUsage: maxDaily,
+        minDailyUsage: minDaily,
+        totalDays: history.length
+      },
+      statusLevel,
+      history: history.slice(0, 7) // Return last 7 days for chart
+    });
+  } catch (error) {
+    logger.error('Failed to get quota status', error);
+    res.status(500).json({ error: 'Failed to retrieve quota status' });
+  }
+});
+
+/**
  * GET /api/admin/api-logs
  * Get recent API logs for debugging
  */
@@ -277,6 +350,48 @@ router.delete('/api-logs', async (req, res) => {
   } catch (error) {
     logger.error('Failed to clear API logs', error);
     res.status(500).json({ error: 'Failed to clear API logs' });
+  }
+});
+
+/**
+ * GET /api/admin/query-performance
+ * Get database query performance statistics
+ * Sprint 5: Performance Optimization
+ */
+router.get('/query-performance', async (req, res) => {
+  try {
+    const { slowQueries: includeSlowQueries, limit } = req.query;
+    const slowQueriesLimit = Math.min(parseInt(limit) || 50, 200);
+
+    const stats = getQueryStats();
+    const response = {
+      ...stats,
+      timestamp: new Date().toISOString(),
+    };
+
+    if (includeSlowQueries === 'true') {
+      response.slowQueries = getSlowQueries(slowQueriesLimit);
+    }
+
+    res.json(response);
+  } catch (error) {
+    logger.error('Failed to get query performance stats', error);
+    res.status(500).json({ error: 'Failed to retrieve query performance statistics' });
+  }
+});
+
+/**
+ * POST /api/admin/query-performance/reset
+ * Reset query performance statistics
+ * Sprint 5: Performance Optimization
+ */
+router.post('/query-performance/reset', async (req, res) => {
+  try {
+    resetStats();
+    res.json({ message: 'Query performance statistics reset successfully' });
+  } catch (error) {
+    logger.error('Failed to reset query performance stats', error);
+    res.status(500).json({ error: 'Failed to reset query performance statistics' });
   }
 });
 

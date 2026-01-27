@@ -642,6 +642,39 @@ export async function initializeDatabase() {
       logger.debug('Migration: inline_citations column already exists');
     }
 
+    // ==========================================
+    // Phase 3: Quota Management (Google Search Grounding)
+    // ==========================================
+
+    // Create google_search_quota_tracking table
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS google_search_quota_tracking (
+          id TEXT PRIMARY KEY,
+          date DATE NOT NULL DEFAULT CURRENT_DATE,
+          queries_used INTEGER NOT NULL DEFAULT 0,
+          quota_limit INTEGER NOT NULL DEFAULT 1000000,
+          last_query_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(date)
+        )
+      `;
+      logger.info('Table: google_search_quota_tracking created');
+    } catch (error) {
+      logger.debug('Table: google_search_quota_tracking already exists');
+    }
+
+    // Create index for date-based quota queries
+    try {
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_quota_date
+        ON google_search_quota_tracking(date DESC)
+      `;
+      logger.info('Index: idx_quota_date created');
+    } catch (error) {
+      logger.debug('Index: idx_quota_date already exists');
+    }
+
     // Sprint 5: Performance Optimization - Create materialized view for analytics
     try {
       await sql`

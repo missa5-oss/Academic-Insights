@@ -7,6 +7,7 @@ import logger from '../utils/logger.js';
 import { sql } from '../db.js';
 import { logAiUsage } from '../utils/aiLogger.js';
 import { verifyExtraction } from '../agents/verifierAgent.js';
+import { incrementQuotaUsage, isQuotaAvailable } from '../utils/quotaTracker.js';
 
 const router = Router();
 
@@ -374,6 +375,17 @@ router.post('/extract', validateExtraction, async (req, res) => {
 
     const ai = getClient();
 
+    // Phase 3: Check quota before API call
+    const hasQuota = await isQuotaAvailable();
+    if (!hasQuota) {
+      logger.error('Google Search quota exceeded for today');
+      return res.status(429).json({
+        status: 'Failed',
+        error: 'Daily Google Search quota exceeded. Please try again tomorrow.',
+        raw_content: 'Service temporarily unavailable due to API quota limits.'
+      });
+    }
+
     // Single extraction call for all program information
     let extractionResult;
     try {
@@ -721,6 +733,16 @@ router.post('/extract', validateExtraction, async (req, res) => {
       search_query: extractionResult.searchQuery || null,
       inline_citations: inlineCitations
     };
+
+    // Phase 3: Track quota usage after successful extraction with Google Search
+    if (validatedSources.length > 0) {
+      const quotaStatus = await incrementQuotaUsage();
+      logger.info('Quota updated', {
+        used: quotaStatus?.used,
+        remaining: quotaStatus?.remaining,
+        usagePercent: quotaStatus?.usagePercent?.toFixed(1) + '%'
+      });
+    }
 
     // --- VERIFICATION AGENT ---
     // Run verification to validate extraction accuracy
