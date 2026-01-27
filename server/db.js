@@ -167,6 +167,40 @@ export async function initializeDatabase() {
       logger.debug('Index: idx_results_extraction_date already exists');
     }
 
+    // Sprint 5: Performance Optimization - Add missing composite indexes
+    // Composite index for common filter combinations (project_id, status, confidence)
+    try {
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_results_project_status_confidence
+        ON extraction_results(project_id, status, confidence_score)
+      `;
+      logger.info('Index: idx_results_project_status_confidence created');
+    } catch (error) {
+      logger.debug('Index: idx_results_project_status_confidence already exists');
+    }
+
+    // Index for trends queries (project_id, extracted_at DESC)
+    try {
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_results_project_extracted_at
+        ON extraction_results(project_id, extracted_at DESC)
+      `;
+      logger.info('Index: idx_results_project_extracted_at created');
+    } catch (error) {
+      logger.debug('Index: idx_results_project_extracted_at already exists');
+    }
+
+    // Index for history lookups (project_id, school_name, program_name)
+    try {
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_results_school_program
+        ON extraction_results(project_id, school_name, program_name)
+      `;
+      logger.info('Index: idx_results_school_program created');
+    } catch (error) {
+      logger.debug('Index: idx_results_school_program already exists');
+    }
+
     // Add actual_program_name column if it doesn't exist (migration)
     try {
       await sql`
@@ -580,6 +614,63 @@ export async function initializeDatabase() {
       logger.info('Index: idx_results_verification_status created');
     } catch (error) {
       logger.debug('Index: idx_results_verification_status already exists');
+    }
+
+    // ==========================================
+    // Phase 2: Enhanced Attribution (Google Search Grounding)
+    // ==========================================
+
+    // Add search_query column for search transparency
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS search_query TEXT DEFAULT NULL
+      `;
+      logger.info('Migration: search_query column added');
+    } catch (error) {
+      logger.debug('Migration: search_query column already exists');
+    }
+
+    // Add inline_citations column for grounding attribution
+    try {
+      await sql`
+        ALTER TABLE extraction_results
+        ADD COLUMN IF NOT EXISTS inline_citations JSONB DEFAULT NULL
+      `;
+      logger.info('Migration: inline_citations column added');
+    } catch (error) {
+      logger.debug('Migration: inline_citations column already exists');
+    }
+
+    // Sprint 5: Performance Optimization - Create materialized view for analytics
+    try {
+      await sql`
+        CREATE MATERIALIZED VIEW IF NOT EXISTS project_analytics AS
+        SELECT
+          project_id,
+          COUNT(*) as total_results,
+          COUNT(*) FILTER (WHERE status = 'Success') as success_count,
+          COUNT(*) FILTER (WHERE status = 'Success' AND tuition_amount IS NOT NULL) as success_with_tuition_count,
+          COUNT(*) FILTER (WHERE is_stem = true) as stem_count,
+          COUNT(*) FILTER (WHERE is_stem = false) as non_stem_count,
+          MAX(extracted_at) as last_update
+        FROM extraction_results
+        GROUP BY project_id
+      `;
+      logger.info('Materialized view: project_analytics created');
+    } catch (error) {
+      logger.debug('Materialized view: project_analytics already exists or creation failed');
+    }
+
+    // Create index on materialized view for faster lookups
+    try {
+      await sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_project_analytics_project_id
+        ON project_analytics(project_id)
+      `;
+      logger.info('Index: idx_project_analytics_project_id created');
+    } catch (error) {
+      logger.debug('Index: idx_project_analytics_project_id already exists');
     }
 
     logger.info('Database schema initialized successfully');

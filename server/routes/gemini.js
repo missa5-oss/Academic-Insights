@@ -316,10 +316,51 @@ OUTPUT - Return ONLY valid JSON, no markdown, no explanation:
     throw new Error('Failed to parse extraction response as JSON');
   }
 
+  // Phase 2: Capture search query for transparency
+  const searchQuery = `"${school}" "${program}" tuition fees site:.edu`;
+
   return {
     data: parsedData,
-    response: response
+    response: response,
+    searchQuery: searchQuery
   };
+}
+
+/**
+ * Extract inline citations from grounding supports
+ * Maps response text segments to source indices for attribution
+ * Phase 2: Enhanced Attribution
+ */
+function extractInlineCitations(response, validatedSources) {
+  const citations = [];
+  const groundingSupports = response.candidates?.[0]?.groundingMetadata?.groundingSupports || [];
+
+  if (groundingSupports.length === 0 || validatedSources.length === 0) {
+    return null;
+  }
+
+  groundingSupports.forEach(support => {
+    const sourceIndices = support.groundingChunkIndices || [];
+    const text = support.segment?.text || support.text || '';
+
+    if (text && sourceIndices.length > 0) {
+      // Map chunk indices to validated source indices
+      const mappedSources = sourceIndices
+        .filter(idx => idx < validatedSources.length)
+        .map(idx => idx);
+
+      if (mappedSources.length > 0) {
+        citations.push({
+          text: text.substring(0, 200), // Limit snippet length
+          sourceIndices: mappedSources,
+          startIndex: support.segment?.startIndex || null,
+          endIndex: support.segment?.endIndex || null
+        });
+      }
+    }
+  });
+
+  return citations.length > 0 ? citations : null;
 }
 
 // --- TUITION EXTRACTION ENDPOINT ---
@@ -656,6 +697,9 @@ router.post('/extract', validateExtraction, async (req, res) => {
       }
     }
 
+    // Phase 2: Extract inline citations from grounding supports
+    const inlineCitations = extractInlineCitations(extractionResult.response, validatedSources);
+
     const result = {
       tuition_amount: formatCurrency(tuitionAmount),
       tuition_period: tuitionPeriod,
@@ -672,7 +716,10 @@ router.post('/extract', validateExtraction, async (req, res) => {
       status: extractedData.status === 'Not Found' ? 'Not Found' : 'Success',
       source_url: primarySourceUrl,
       validated_sources: validatedSources,
-      raw_content: sanitizedRawContent
+      raw_content: sanitizedRawContent,
+      // Phase 2: Enhanced Attribution
+      search_query: extractionResult.searchQuery || null,
+      inline_citations: inlineCitations
     };
 
     // --- VERIFICATION AGENT ---
