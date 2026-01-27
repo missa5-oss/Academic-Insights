@@ -1,13 +1,10 @@
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { useDebounce } from '@/src/hooks/useDebounce';
 import { ExtractionResult, ConfidenceScore, ExtractionStatus } from '../types';
-import { AuditModal } from '../components/AuditModal';
-import { HistoryModal } from '../components/HistoryModal';
-import { AddTargetModal, EditProjectModal } from '../components/ProjectModals';
 import { StatCard } from '../components/StatCard';
 import { generateExecutiveSummary, simulateExtraction, getCampusLocation, fetchAnalysisHistory } from '../services/geminiService';
 import { API_URL } from '@/src/config';
@@ -15,8 +12,14 @@ import { Search, RefreshCw, Bot, AlertTriangle, CheckCircle, ExternalLink, Eye, 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart as RePieChart, Pie, Legend, LineChart, Line } from 'recharts';
-import { ChatAssistant } from '../components/ChatAssistant';
 import { ConfirmDialog } from '@/src/components/ConfirmDialog';
+
+// Lazy load modal and chat components for better performance
+const AuditModal = lazy(() => import('../components/AuditModal').then(m => ({ default: m.AuditModal })));
+const HistoryModal = lazy(() => import('../components/HistoryModal').then(m => ({ default: m.HistoryModal })));
+const AddTargetModal = lazy(() => import('../components/ProjectModals').then(m => ({ default: m.AddTargetModal })));
+const EditProjectModal = lazy(() => import('../components/ProjectModals').then(m => ({ default: m.EditProjectModal })));
+const ChatAssistant = lazy(() => import('../components/ChatAssistant').then(m => ({ default: m.ChatAssistant })));
 
 export const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -1434,51 +1437,67 @@ export const ProjectDetail: React.FC = () => {
       </div>
       )}
 
-      {/* Modals */}
-      {selectedResult && (
-        <AuditModal 
-          isOpen={isAuditOpen} 
-          onClose={() => setIsAuditOpen(false)} 
-          data={selectedResult} 
-        />
+      {/* Modals - Lazy loaded for performance */}
+      {selectedResult && isAuditOpen && (
+        <Suspense fallback={<div />}>
+          <AuditModal
+            isOpen={isAuditOpen}
+            onClose={() => setIsAuditOpen(false)}
+            data={selectedResult}
+          />
+        </Suspense>
       )}
-      
-      <AddTargetModal
-        isOpen={isAddTargetOpen}
-        onClose={() => setIsAddTargetOpen(false)}
-        onSubmit={(targets) => {
-             addTargets(project.id, targets.map(t => ({ schoolName: t.school, programName: t.program })));
-        }}
-      />
-      
-      <EditProjectModal
-        isOpen={isEditProjectOpen}
-        onClose={() => setIsEditProjectOpen(false)}
-        initialName={project.name}
-        initialDescription={project.description}
-        onSubmit={handleEditProject}
-      />
+
+      {isAddTargetOpen && (
+        <Suspense fallback={<div />}>
+          <AddTargetModal
+            isOpen={isAddTargetOpen}
+            onClose={() => setIsAddTargetOpen(false)}
+            onSubmit={(targets) => {
+                 addTargets(project.id, targets.map(t => ({ schoolName: t.school, programName: t.program })));
+            }}
+          />
+        </Suspense>
+      )}
+
+      {isEditProjectOpen && (
+        <Suspense fallback={<div />}>
+          <EditProjectModal
+            isOpen={isEditProjectOpen}
+            onClose={() => setIsEditProjectOpen(false)}
+            initialName={project.name}
+            initialDescription={project.description}
+            onSubmit={handleEditProject}
+          />
+        </Suspense>
+      )}
 
       {/* History Modal */}
-      {historyResultId && (
-        <HistoryModal
-          isOpen={isHistoryOpen}
-          onClose={() => {
-            setIsHistoryOpen(false);
-            setHistoryResultId(null);
-          }}
-          resultId={historyResultId}
-          onTrackUpdate={() => handleTrackPriceUpdate(historyResultId)}
-        />
+      {historyResultId && isHistoryOpen && (
+        <Suspense fallback={<div />}>
+          <HistoryModal
+            isOpen={isHistoryOpen}
+            onClose={() => {
+              setIsHistoryOpen(false);
+              setHistoryResultId(null);
+            }}
+            resultId={historyResultId}
+            onTrackUpdate={() => handleTrackPriceUpdate(historyResultId)}
+          />
+        </Suspense>
       )}
 
-      {/* Floating Chat Assistant */}
-      <ChatAssistant
-        isOpen={isChatOpen}
-        onToggle={() => setIsChatOpen(!isChatOpen)}
-        data={projectResults.filter(r => r.status === ExtractionStatus.SUCCESS)}
-        projectId={project?.id || ''}
-      />
+      {/* Floating Chat Assistant - Lazy loaded */}
+      {isChatOpen && (
+        <Suspense fallback={<div />}>
+          <ChatAssistant
+            isOpen={isChatOpen}
+            onToggle={() => setIsChatOpen(!isChatOpen)}
+            data={projectResults.filter(r => r.status === ExtractionStatus.SUCCESS)}
+            projectId={project?.id || ''}
+          />
+        </Suspense>
+      )}
 
       {/* Confirmation Dialogs */}
       <ConfirmDialog
