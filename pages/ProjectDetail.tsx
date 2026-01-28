@@ -28,7 +28,22 @@ export const ProjectDetail: React.FC = () => {
   const toast = useToast();
 
   const project = projects.find(p => p.id === id);
-  const projectResults = results.filter(r => r.project_id === id);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(50);
+  const [totalResults, setTotalResults] = useState(0);
+  const [paginatedResults, setPaginatedResults] = useState<ExtractionResult[]>([]);
+  const [isLoadingResults, setIsLoadingResults] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Use paginated results when available, fallback to filtered results
+  const projectResults = paginatedResults.length > 0 ? paginatedResults : results.filter(r => r.project_id === id);
+
+  // Function to refresh paginated data
+  const refreshPaginatedResults = useCallback(() => {
+    setRefreshTrigger(prev => prev + 1);
+  }, []);
 
   const [viewMode, setViewMode] = useState<'table' | 'analysis'>('table');
   const [searchTerm, setSearchTerm] = useState('');
@@ -266,6 +281,35 @@ export const ProjectDetail: React.FC = () => {
       setIsLoadingTrends(false);
     }
   }, [project, toast]);
+
+  // Fetch paginated results for this project
+  React.useEffect(() => {
+    const fetchPaginatedResults = async () => {
+      if (!id) return;
+
+      setIsLoadingResults(true);
+      try {
+        const response = await fetch(
+          `${API_URL}/api/results?project_id=${id}&page=${currentPage}&limit=${pageSize}`
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          // Backend returns { data: [...], pagination: {...} } format
+          setPaginatedResults(data.data || data);
+          setTotalResults(data.pagination?.total || data.length);
+        }
+      } catch (error) {
+        console.error('Failed to fetch paginated results:', error);
+        // Fallback to global results on error
+        setPaginatedResults([]);
+      } finally {
+        setIsLoadingResults(false);
+      }
+    };
+
+    fetchPaginatedResults();
+  }, [id, currentPage, pageSize, refreshTrigger]);
 
   // Load analytics and trends when switching to analysis view
   React.useEffect(() => {
@@ -921,7 +965,15 @@ export const ProjectDetail: React.FC = () => {
 
       {/* Main Content Area */}
       {viewMode === 'table' ? (
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden animate-fade-in-up">
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden animate-fade-in-up relative">
+          {isLoadingResults && (
+            <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                <p className="text-sm text-slate-600">Loading results...</p>
+              </div>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
@@ -1174,6 +1226,65 @@ export const ProjectDetail: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalResults > pageSize && (
+            <div className="flex items-center justify-between px-6 py-4 bg-white border-t border-slate-200">
+              <div className="text-sm text-slate-600">
+                Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalResults)} of {totalResults} results
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1 || isLoadingResults}
+                  className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <div className="flex items-center gap-1">
+                  {[...Array(Math.ceil(totalResults / pageSize))].map((_, idx) => {
+                    const pageNum = idx + 1;
+                    const totalPages = Math.ceil(totalResults / pageSize);
+
+                    // Show first page, last page, current page, and pages around current
+                    if (
+                      pageNum === 1 ||
+                      pageNum === totalPages ||
+                      (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+                    ) {
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          disabled={isLoadingResults}
+                          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                            currentPage === pageNum
+                              ? 'bg-blue-600 text-white'
+                              : 'text-slate-700 bg-white border border-slate-300 hover:bg-slate-50'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    } else if (
+                      (pageNum === currentPage - 2 && pageNum > 1) ||
+                      (pageNum === currentPage + 2 && pageNum < totalPages)
+                    ) {
+                      return <span key={pageNum} className="px-2 text-slate-400">...</span>;
+                    }
+                    return null;
+                  })}
+                </div>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalResults / pageSize), p + 1))}
+                  disabled={currentPage === Math.ceil(totalResults / pageSize) || isLoadingResults}
+                  className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-6 animate-fade-in-up">
