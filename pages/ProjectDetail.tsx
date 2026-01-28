@@ -189,12 +189,12 @@ export const ProjectDetail: React.FC = () => {
     };
   }, [filteredResults]);
 
-  const handleAudit = (result: ExtractionResult) => {
+  const handleAudit = useCallback((result: ExtractionResult) => {
     setSelectedResult(result);
     setIsAuditOpen(true);
-  };
+  }, []);
 
-  const handleRunAnalysis = async (forceRefresh?: boolean) => {
+  const handleRunAnalysis = useCallback(async (forceRefresh?: boolean) => {
     setIsAnalyzing(true);
     setCopiedAnalysis(false);
     const response = await generateExecutiveSummary(
@@ -212,10 +212,10 @@ export const ProjectDetail: React.FC = () => {
     if (project?.id) {
       loadAnalysisHistory(project.id);
     }
-  };
+  }, [filteredResults, project?.id]);
 
   // Copy analysis to clipboard
-  const handleCopyAnalysis = () => {
+  const handleCopyAnalysis = useCallback(() => {
     if (aiAnalysis) {
       navigator.clipboard.writeText(aiAnalysis).then(() => {
         setCopiedAnalysis(true);
@@ -223,7 +223,7 @@ export const ProjectDetail: React.FC = () => {
         setTimeout(() => setCopiedAnalysis(false), 2000);
       });
     }
-  };
+  }, [aiAnalysis, toast]);
 
   // Load analysis history for the project
   const loadAnalysisHistory = async (projectId: string) => {
@@ -585,36 +585,36 @@ export const ProjectDetail: React.FC = () => {
     document.body.removeChild(link);
   };
   
-  const handleEditProject = (name: string, description: string) => {
+  const handleEditProject = useCallback((name: string, description: string) => {
     if (project) {
         editProject(project.id, name, description);
     }
-  };
-  
-  const handleDeleteProject = () => {
-    setConfirmDialog({ isOpen: true, type: 'deleteProject' });
-  };
+  }, [project, editProject]);
 
-  const confirmDeleteProject = () => {
+  const handleDeleteProject = useCallback(() => {
+    setConfirmDialog({ isOpen: true, type: 'deleteProject' });
+  }, []);
+
+  const confirmDeleteProject = useCallback(() => {
     if (project) {
       deleteProject(project.id);
       navigate('/');
     }
     setConfirmDialog({ isOpen: false, type: null });
-  };
+  }, [project, deleteProject, navigate]);
 
   // --- Selection Handlers ---
 
-  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSelectAll = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
       const allIds = new Set(filteredResults.map(r => r.id));
       setSelectedIds(allIds);
     } else {
       setSelectedIds(new Set());
     }
-  };
+  }, [filteredResults]);
 
-  const handleSelectOne = (id: string) => {
+  const handleSelectOne = useCallback((id: string) => {
     const newSelected = new Set(selectedIds);
     if (newSelected.has(id)) {
       newSelected.delete(id);
@@ -622,7 +622,7 @@ export const ProjectDetail: React.FC = () => {
       newSelected.add(id);
     }
     setSelectedIds(newSelected);
-  };
+  }, [selectedIds]);
 
   const handleBulkDelete = () => {
     if (selectedIds.size === 0) return;

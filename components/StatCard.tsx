@@ -14,8 +14,9 @@ interface StatCardProps {
  * StatCard Component
  * Displays a metric card with title, value, icon, and optional trend indicator
  * Used in Market Analysis dashboard for key statistics (avg tuition, highest, lowest, completion rate)
+ * Memoized to prevent unnecessary re-renders when props haven't changed
  */
-export const StatCard: React.FC<StatCardProps> = ({
+export const StatCard: React.FC<StatCardProps> = React.memo(({
   title,
   value,
   subtitle,
@@ -54,6 +55,6 @@ export const StatCard: React.FC<StatCardProps> = ({
       )}
     </div>
   );
-};
+});
 
 export default StatCard;

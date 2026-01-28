@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo } from 'react';
 import { Project, ExtractionResult, ExtractionStatus, ConfidenceScore, User } from '../types';
 import { API_URL } from '@/src/config';
 import { TrendData } from '../types';
@@ -435,24 +435,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  // Memoize context value to prevent unnecessary re-renders of consumers
+  const contextValue = useMemo(() => ({
+    user,
+    login,
+    logout,
+    projects,
+    results,
+    addProject,
+    editProject,
+    deleteProject,
+    addTargets,
+    updateResult,
+    deleteResult,
+    restoreData,
+    getResultHistory,
+    createNewVersion,
+    getTrendsData
+  }), [user, projects, results]);
+
   return (
-    <AppContext.Provider value={{
-      user,
-      login,
-      logout,
-      projects,
-      results,
-      addProject,
-      editProject,
-      deleteProject,
-      addTargets,
-      updateResult,
-      deleteResult,
-      restoreData,
-      getResultHistory,
-      createNewVersion,
-      getTrendsData
-    }}>
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );
