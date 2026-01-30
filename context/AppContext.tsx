@@ -81,20 +81,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [results, setResults] = useState<ExtractionResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch initial data from API
+  // Fetch initial data from API (Sprint 7: Using batch endpoint)
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [projectsRes, resultsRes] = await Promise.all([
-          fetch(`${API_URL}/api/projects`),
-          fetch(`${API_URL}/api/results`)
-        ]);
+        // Use batch endpoint to fetch both projects and results in a single request
+        const response = await fetch(`${API_URL}/api/batch?projects=true&results=true`);
 
-        if (projectsRes.ok && resultsRes.ok) {
-          const projectsData = await projectsRes.json();
-          const resultsData = await resultsRes.json();
-          setProjects(projectsData);
-          setResults(resultsData);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.projects && !data.projects.error) {
+            setProjects(data.projects);
+          }
+          if (data.results && !data.results.error) {
+            setResults(data.results);
+          }
         }
       } catch (error) {
         console.error('Failed to fetch data from API:', error);

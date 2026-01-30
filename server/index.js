@@ -9,6 +9,7 @@ import resultsRouter from './routes/results.js';
 import geminiRouter from './routes/gemini.js';
 import conversationsRouter from './routes/conversations.js';
 import adminRouter from './routes/admin.js';
+import batchRouter from './routes/batch.js';
 import { apiLoggerMiddleware } from './middleware/apiLogger.js';
 import { APP_VERSION, PORT as SERVER_PORT, getCorsOrigins, RATE_LIMITS } from './config.js';
 import logger from './utils/logger.js';
@@ -78,6 +79,7 @@ app.get('/health', (req, res) => {
 });
 
 // Routes with rate limiting
+app.use('/api/batch', apiLimiter, batchRouter); // Sprint 7: Request batching
 app.use('/api/projects', apiLimiter, projectsRouter);
 app.use('/api/results', apiLimiter, resultsRouter);
 app.use('/api/gemini', geminiLimiter, geminiRouter); // Stricter limits for AI endpoints
