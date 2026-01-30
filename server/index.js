@@ -58,8 +58,43 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false, // Allow embedding for development
 }));
 
-// Compression middleware for response optimization
-app.use(compression());
+// Compression middleware with tuning (Sprint 7: Response compression optimization)
+app.use(compression({
+  // Only compress responses larger than 1KB (smaller responses add overhead)
+  threshold: 1024,
+
+  // Compression level: 6 = balanced speed/ratio (default is 6, range 0-9)
+  // Lower = faster but less compression, Higher = slower but more compression
+  level: 6,
+
+  // Filter function - only compress text-based content
+  filter: (req, res) => {
+    // Don't compress if client doesn't support it
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+
+    // Use compression for JSON, text, and other compressible types
+    const contentType = res.getHeader('Content-Type');
+    if (!contentType) return false;
+
+    // Compress JSON API responses (our primary use case)
+    if (contentType.includes('application/json')) return true;
+
+    // Compress text-based content
+    if (contentType.includes('text/')) return true;
+
+    // Skip images, videos, and already-compressed content
+    return false;
+  },
+
+  // Memory level: 8 = balanced memory/speed (default is 8, range 1-9)
+  memLevel: 8,
+
+  // Strategy: Z_DEFAULT_STRATEGY for general purpose
+  // Could use Z_FILTERED for JSON (slightly better), but default is fine
+  strategy: 0 // Z_DEFAULT_STRATEGY
+}));
 
 // CORS and JSON parsing
 app.use(cors(corsOptions));
