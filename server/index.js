@@ -13,6 +13,7 @@ import batchRouter from './routes/batch.js';
 import { apiLoggerMiddleware } from './middleware/apiLogger.js';
 import { APP_VERSION, PORT as SERVER_PORT, getCorsOrigins, RATE_LIMITS } from './config.js';
 import logger from './utils/logger.js';
+import { optimizeJsonResponse } from './utils/jsonOptimizer.js';
 
 const app = express();
 const PORT = SERVER_PORT;
@@ -72,6 +73,9 @@ app.use((req, res, next) => {
 
 // API request logging middleware (Sprint 3: Observability)
 app.use('/api', apiLoggerMiddleware);
+
+// JSON payload optimization (Sprint 7: Remove null/undefined values)
+app.use('/api', optimizeJsonResponse);
 
 // Health check (simple - for backwards compatibility)
 app.get('/health', (req, res) => {
