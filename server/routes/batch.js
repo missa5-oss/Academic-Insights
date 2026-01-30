@@ -2,6 +2,7 @@ import express from 'express';
 import { sql } from '../db.js';
 import logger from '../utils/logger.js';
 import { parseFields, projectFieldsArray } from '../utils/fieldSelection.js';
+import { withETag } from '../utils/etag.js';
 
 const router = express.Router();
 
@@ -21,8 +22,10 @@ const router = express.Router();
  *
  * Example: GET /api/batch?projects=true&results=true&project_id=p-123&results_fields=id,school_name,tuition_amount
  * Returns: { projects: [...], results: [...] }
+ *
+ * Sprint 7: ETag caching for conditional requests
  */
-router.get('/', async (req, res) => {
+router.get('/', withETag, async (req, res) => {
   const startTime = Date.now();
   const {
     projects, results, project_id, conversations, analytics,

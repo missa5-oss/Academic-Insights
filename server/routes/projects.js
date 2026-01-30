@@ -3,11 +3,12 @@ import { sql } from '../db.js';
 import { validateProject } from '../middleware/validation.js';
 import logger from '../utils/logger.js';
 import { parseFields, projectFieldsArray } from '../utils/fieldSelection.js';
+import { withETag } from '../utils/etag.js';
 
 const router = express.Router();
 
-// GET all projects
-router.get('/', async (req, res) => {
+// GET all projects (Sprint 7: ETag caching)
+router.get('/', withETag, async (req, res) => {
   try {
     const { fields } = req.query;
     const selectedFields = parseFields(fields);
@@ -23,8 +24,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET single project
-router.get('/:id', async (req, res) => {
+// GET single project (Sprint 7: ETag caching)
+router.get('/:id', withETag, async (req, res) => {
   try {
     const { fields } = req.query;
     const selectedFields = parseFields(fields);
