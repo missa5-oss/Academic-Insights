@@ -2,14 +2,21 @@ import express from 'express';
 import { sql } from '../db.js';
 import { validateProject } from '../middleware/validation.js';
 import logger from '../utils/logger.js';
+import { parseFields, projectFieldsArray } from '../utils/fieldSelection.js';
 
 const router = express.Router();
 
 // GET all projects
 router.get('/', async (req, res) => {
   try {
+    const { fields } = req.query;
+    const selectedFields = parseFields(fields);
+
     const projects = await sql`SELECT * FROM projects ORDER BY created_at DESC`;
-    res.json(projects);
+
+    // Apply field selection if requested (Sprint 7: Field selection)
+    const filteredProjects = selectedFields ? projectFieldsArray(projects, selectedFields) : projects;
+    res.json(filteredProjects);
   } catch (error) {
     logger.error('Error fetching projects', error);
     res.status(500).json({ error: 'Failed to fetch projects' });
@@ -19,11 +26,17 @@ router.get('/', async (req, res) => {
 // GET single project
 router.get('/:id', async (req, res) => {
   try {
+    const { fields } = req.query;
+    const selectedFields = parseFields(fields);
+
     const [project] = await sql`SELECT * FROM projects WHERE id = ${req.params.id}`;
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
-    res.json(project);
+
+    // Apply field selection if requested (Sprint 7: Field selection)
+    const filteredProject = selectedFields ? projectFieldsArray([project], selectedFields)[0] : project;
+    res.json(filteredProject);
   } catch (error) {
     logger.error('Error fetching project', error);
     res.status(500).json({ error: 'Failed to fetch project' });

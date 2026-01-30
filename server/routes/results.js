@@ -4,15 +4,19 @@ import { validateResult, validateBulkResults, validateBulkDelete } from '../midd
 import logger from '../utils/logger.js';
 import { cache, getAnalyticsCacheKey, invalidateAnalyticsCache, setCacheHeaders } from '../utils/cache.js';
 import { refreshProjectAnalyticsForProject } from '../utils/materializedView.js';
+import { parseFields, projectFieldsArray } from '../utils/fieldSelection.js';
 import crypto from 'crypto';
 import quotaGuard from '../middleware/quotaGuard.js';
 
 const router = express.Router();
 
-// GET all results (optionally filter by project_id, with pagination)
+// GET all results (optionally filter by project_id, with pagination, field selection)
 router.get('/', async (req, res) => {
   try {
-    const { project_id, page, limit, status, confidence } = req.query;
+    const { project_id, page, limit, status, confidence, fields } = req.query;
+
+    // Parse field selection (Sprint 7: Field selection)
+    const selectedFields = parseFields(fields);
 
     // Pagination defaults
     const pageNum = Math.max(1, parseInt(page) || 1);
@@ -91,10 +95,13 @@ router.get('/', async (req, res) => {
       totalCount = parseInt(countResult.count);
     }
 
+    // Apply field selection if requested (Sprint 7: Field selection)
+    const filteredResults = selectedFields ? projectFieldsArray(results, selectedFields) : results;
+
     // Return with pagination metadata if page/limit was requested
     if (page || limit) {
       res.json({
-        data: results,
+        data: filteredResults,
         pagination: {
           page: pageNum,
           limit: limitNum,
@@ -105,7 +112,7 @@ router.get('/', async (req, res) => {
       });
     } else {
       // Backward compatible: return just the array
-      res.json(results);
+      res.json(filteredResults);
     }
   } catch (error) {
     logger.error('Error fetching results', error);
@@ -116,11 +123,17 @@ router.get('/', async (req, res) => {
 // GET single result
 router.get('/:id', async (req, res) => {
   try {
+    const { fields } = req.query;
+    const selectedFields = parseFields(fields);
+
     const [result] = await sql`SELECT * FROM extraction_results WHERE id = ${req.params.id}`;
     if (!result) {
       return res.status(404).json({ error: 'Result not found' });
     }
-    res.json(result);
+
+    // Apply field selection if requested (Sprint 7: Field selection)
+    const filteredResult = selectedFields ? projectFieldsArray([result], selectedFields)[0] : result;
+    res.json(filteredResult);
   } catch (error) {
     logger.error('Error fetching result', error);
     res.status(500).json({ error: 'Failed to fetch result' });

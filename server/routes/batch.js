@@ -1,6 +1,7 @@
 import express from 'express';
 import { sql } from '../db.js';
 import logger from '../utils/logger.js';
+import { parseFields, projectFieldsArray } from '../utils/fieldSelection.js';
 
 const router = express.Router();
 
@@ -14,13 +15,24 @@ const router = express.Router();
  * - project_id: Filter results by project
  * - conversations: Include conversations for a project
  * - analytics: Include analytics for a project
+ * - projects_fields: Comma-separated list of project fields to include
+ * - results_fields: Comma-separated list of result fields to include
+ * - conversations_fields: Comma-separated list of conversation fields to include
  *
- * Example: GET /api/batch?projects=true&results=true&project_id=p-123
+ * Example: GET /api/batch?projects=true&results=true&project_id=p-123&results_fields=id,school_name,tuition_amount
  * Returns: { projects: [...], results: [...] }
  */
 router.get('/', async (req, res) => {
   const startTime = Date.now();
-  const { projects, results, project_id, conversations, analytics } = req.query;
+  const {
+    projects, results, project_id, conversations, analytics,
+    projects_fields, results_fields, conversations_fields
+  } = req.query;
+
+  // Parse field selections (Sprint 7: Field selection)
+  const projectsFieldList = parseFields(projects_fields);
+  const resultsFieldList = parseFields(results_fields);
+  const conversationsFieldList = parseFields(conversations_fields);
 
   try {
     const response = {};
@@ -30,7 +42,10 @@ router.get('/', async (req, res) => {
     if (projects === 'true') {
       promises.push(
         sql`SELECT * FROM projects ORDER BY created_at DESC`
-          .then(data => { response.projects = data; })
+          .then(data => {
+            // Apply field selection if requested (Sprint 7: Field selection)
+            response.projects = projectsFieldList ? projectFieldsArray(data, projectsFieldList) : data;
+          })
           .catch(err => {
             logger.error('Batch: Failed to fetch projects', err);
             response.projects = { error: 'Failed to fetch projects' };
@@ -46,7 +61,10 @@ router.get('/', async (req, res) => {
 
       promises.push(
         resultsQuery
-          .then(data => { response.results = data; })
+          .then(data => {
+            // Apply field selection if requested (Sprint 7: Field selection)
+            response.results = resultsFieldList ? projectFieldsArray(data, resultsFieldList) : data;
+          })
           .catch(err => {
             logger.error('Batch: Failed to fetch results', err);
             response.results = { error: 'Failed to fetch results' };
@@ -58,7 +76,10 @@ router.get('/', async (req, res) => {
     if (conversations === 'true' && project_id) {
       promises.push(
         sql`SELECT * FROM conversations WHERE project_id = ${project_id} ORDER BY last_message_at DESC`
-          .then(data => { response.conversations = data; })
+          .then(data => {
+            // Apply field selection if requested (Sprint 7: Field selection)
+            response.conversations = conversationsFieldList ? projectFieldsArray(data, conversationsFieldList) : data;
+          })
           .catch(err => {
             logger.error('Batch: Failed to fetch conversations', err);
             response.conversations = { error: 'Failed to fetch conversations' };
