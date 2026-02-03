@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run server:*)",
+      "Bash(timeout 3 tail:*)",
+      "Bash(npm run dev:*)",
+      "WebSearch",
+      "WebFetch(domain:ai.google.dev)",
+      "WebFetch(domain:google.github.io)",
+      "Bash(taskkill /F /FI \"WINDOWTITLE eq npm*\")",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(curl:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: Optimize Google Search grounding and fix bulk insert bug\n\nPhase 1 Google Search Grounding Improvements:\n- Set temperature to 1.0 for Gemini 2.5 \\(Google recommendation for grounding\\)\n- Add redirect URL resolution to extract direct .edu URLs from google.com/url redirects\n- Prioritize groundingSupports over web.text for higher quality page content\n- Add debug logging for content extraction priority tracking\n\nBug Fix:\n- Fix bulk insert SQL error \"argument of CASE/WHEN must not return a set\"\n- Replace nested CASE/unnest with NULLIF for location_data field\n- Resolves \"Add Target\" functionality breaking when adding multiple schools\n\nDocumentation:\n- Add comprehensive Google Search grounding comparison doc \\(21KB\\)\n- Document current implementation vs Google''s official recommendations\n- Include optimization roadmap for Phase 2-3 enhancements\n\nImpact:\n- Improved source quality: 90%+ direct .edu URLs \\(was ~80% with redirects\\)\n- Better content extraction: groundingSupports provide more complete snippets\n- Enhanced grounding quality with temperature 1.0 optimization\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(gh:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: Phase 2 - Enhanced attribution with search queries and inline citations\n\nDatabase Migrations:\n- Add search_query column \\(TEXT\\) to extraction_results table\n- Add inline_citations column \\(JSONB\\) to extraction_results table\n- Enables search transparency and grounding attribution\n\nBackend Enhancements:\n- Capture search query used for each extraction\n- Extract inline citations from groundingSupports metadata\n- Add extractInlineCitations\\(\\) utility function\n- Map response text segments to source indices for attribution\n\nNew Fields in Extraction Results:\n- search_query: Shows which search query led to sources\n- inline_citations: Array of citation objects with text, sourceIndices, startIndex, endIndex\n\nBenefits:\n- Improved transparency: Users can see which search was performed\n- Better attribution: Citations link specific text to sources\n- Enhanced trust: Clear connection between data and sources\n- Foundation for UI enhancements in Phase 2.2 \\(frontend display\\)\n\nTechnical Details:\n- Citations extracted from response.candidates[0].groundingMetadata.groundingSupports\n- Limited to 200 characters per citation snippet\n- NULL handling for backward compatibility with existing records\n- JSONB format allows flexible citation structure\n\nNext: Frontend display of search queries and citations in Audit Modal\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(timeout /t 5 /nobreak)",
+      "Bash(cd C:Usersmissa5OneDrive\" - Johns Hopkins\"DesktopAcademic-Insights)",
+      "Bash(python:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm install:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)"
+    ]
+  }
+}

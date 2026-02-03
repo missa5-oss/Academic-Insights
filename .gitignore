@@ -26,3 +26,6 @@ server/node_modules
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code temporary files
+tmpclaude-*
