@@ -2,12 +2,21 @@ import { Router } from 'express';
 import { GoogleGenAI } from '@google/genai';
 import crypto from 'crypto';
 import { validateExtraction, validateChat, validateSummary } from '../middleware/validation.js';
-import { GEMINI_CONFIG } from '../config.js';
+import { GEMINI_CONFIG, VALIDATION, IS_PRODUCTION } from '../config.js';
 import logger from '../utils/logger.js';
 import { sql } from '../db.js';
 import { logAiUsage } from '../utils/aiLogger.js';
 import { verifyExtraction } from '../agents/verifierAgent.js';
 import { incrementQuotaUsage, isQuotaAvailable } from '../utils/quotaTracker.js';
+import {
+  sanitizeForPrompt,
+  sanitizeSchoolName,
+  sanitizeProgramName,
+  sanitizeRemarks,
+  sanitizeRawContent,
+  truncateResults,
+  estimateTokens
+} from '../utils/promptSanitizer.js';
 
 const router = Router();
 
@@ -957,9 +966,19 @@ router.post('/summary', validateSummary, async (req, res) => {
   let wasCached = false;
 
   try {
-    const { data, projectId, forceRefresh } = req.body;
+    const { data: rawData, projectId, forceRefresh } = req.body;
 
-    // Generate hash of data to detect changes (includes projectId for isolation)
+    // Truncate large datasets to prevent excessive token usage (Sprint 8 audit)
+    const { data, wasTruncated, originalCount, summary: truncationSummary } = truncateResults(
+      rawData,
+      VALIDATION.SUMMARY_OPTIMAL_ITEMS
+    );
+
+    if (wasTruncated) {
+      logger.info(`Summary request truncated from ${originalCount} to ${data.length} items for project ${projectId}`);
+    }
+
+    // Generate hash of data to detect changes - include ALL fields that affect output (Sprint 8 audit fix)
     const dataHash = crypto
       .createHash('md5')
       .update(JSON.stringify({
@@ -968,7 +987,15 @@ router.post('/summary', validateSummary, async (req, res) => {
           id: r.id,
           tuition: r.tuition_amount,
           status: r.status,
-          confidence: r.confidence_score
+          confidence: r.confidence_score,
+          // Additional fields that affect summary output (expanded in Sprint 8)
+          is_stem: r.is_stem,
+          cost_per_credit: r.cost_per_credit,
+          total_credits: r.total_credits,
+          program_length_months: r.program_length_months,
+          remarks: r.remarks ? r.remarks.substring(0, 100) : null, // Hash prefix only
+          school_name: r.school_name,
+          program_name: r.program_name
         }))
       }))
       .digest('hex');
@@ -1024,6 +1051,18 @@ router.post('/summary', validateSummary, async (req, res) => {
       })
       .filter(a => a !== null && !isNaN(a));
 
+    // Calculate proper median (Sprint 8 fix: handle even-length arrays correctly)
+    const calculateMedian = (arr) => {
+      if (arr.length === 0) return 0;
+      const sorted = [...arr].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      if (sorted.length % 2 === 0) {
+        // Even length: average of two middle values
+        return Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+      }
+      return Math.round(sorted[mid]);
+    };
+
     const metrics = {
       totalPrograms: data.length,
       successfulExtractions: successfulResults.length,
@@ -1032,14 +1071,15 @@ router.post('/summary', validateSummary, async (req, res) => {
         : 0,
       minTuition: tuitionAmounts.length > 0 ? Math.min(...tuitionAmounts) : 0,
       maxTuition: tuitionAmounts.length > 0 ? Math.max(...tuitionAmounts) : 0,
-      medianTuition: tuitionAmounts.length > 0
-        ? tuitionAmounts.sort((a, b) => a - b)[Math.floor(tuitionAmounts.length / 2)]
-        : 0,
+      medianTuition: calculateMedian(tuitionAmounts),
       stemPrograms: successfulResults.filter(r => r.is_stem === true).length,
       nonStemPrograms: successfulResults.filter(r => r.is_stem !== true).length,
       highConfidence: successfulResults.filter(r => r.confidence_score === 'High').length,
       mediumConfidence: successfulResults.filter(r => r.confidence_score === 'Medium').length,
-      lowConfidence: successfulResults.filter(r => r.confidence_score === 'Low').length
+      lowConfidence: successfulResults.filter(r => r.confidence_score === 'Low').length,
+      // Add truncation info if applicable (Sprint 8)
+      wasTruncated: wasTruncated,
+      originalCount: wasTruncated ? originalCount : undefined
     };
 
     // Find highest and lowest tuition schools
@@ -1057,21 +1097,42 @@ router.post('/summary', validateSummary, async (req, res) => {
     const highestTuition = sortedByTuition[0];
     const lowestTuition = sortedByTuition[sortedByTuition.length - 1];
 
-    // Format data for the prompt - include remarks and content snippets for qualitative analysis
+    // Format data for the prompt with sanitization (Sprint 8 security fix)
+    // All user-controlled content is sanitized to prevent prompt injection
+    let injectionAttemptCount = 0;
     const dataContext = data.map(r => {
+      // Sanitize user-controlled fields
+      const schoolName = sanitizeSchoolName(r.school_name || 'Unknown School');
+      const programName = sanitizeProgramName(r.program_name || 'Unknown Program');
+      const remarks = r.remarks ? sanitizeRemarks(r.remarks) : null;
+      const rawContent = r.raw_content ? sanitizeRawContent(r.raw_content, 300) : null;
+
+      // Track if any injection attempts were detected
+      const { injectionDetected: schoolInjection } = sanitizeForPrompt(r.school_name || '', { detectInjection: true });
+      const { injectionDetected: programInjection } = sanitizeForPrompt(r.program_name || '', { detectInjection: true });
+      const { injectionDetected: remarksInjection } = sanitizeForPrompt(r.remarks || '', { detectInjection: true });
+      if (schoolInjection || programInjection || remarksInjection) {
+        injectionAttemptCount++;
+      }
+
       const parts = [
-        `**${r.school_name}** - ${r.program_name}`,
-        `  Tuition: ${r.tuition_amount || 'Not Found'} (${r.academic_year})`,
+        `${schoolName} - ${programName}`,
+        `  Tuition: ${r.tuition_amount || 'Not Found'} (${r.academic_year || 'N/A'})`,
         r.cost_per_credit ? `  Cost per Credit: ${r.cost_per_credit}` : null,
         r.total_credits ? `  Total Credits: ${r.total_credits}` : null,
         r.is_stem ? `  STEM Designated: Yes` : null,
         r.confidence_score ? `  Data Confidence: ${r.confidence_score}` : null,
-        r.remarks ? `  Remarks: ${r.remarks}` : null,
+        remarks ? `  Remarks: ${remarks}` : null,
         r.source_url ? `  Source: ${r.source_url}` : null,
-        r.raw_content ? `  Content Snippet: ${r.raw_content.substring(0, 300)}` : null
+        rawContent ? `  Content Snippet: ${rawContent}` : null
       ].filter(Boolean);
       return parts.join('\n');
     }).join('\n\n');
+
+    // Log if injection attempts were detected
+    if (injectionAttemptCount > 0) {
+      logger.warn(`Detected ${injectionAttemptCount} potential prompt injection attempts in summary request for project ${projectId}`);
+    }
 
     const prompt = `
       You are a strategic market analyst preparing a concise executive summary for management review.
@@ -1247,6 +1308,20 @@ router.post('/summary', validateSummary, async (req, res) => {
           VALUES (${historyId}, ${projectId}, ${summary}, ${JSON.stringify(responseData.metrics)}, ${dataHash}, ${wasCached})
         `;
         logger.info(`Saved analysis history for project ${projectId}`);
+
+        // Enforce history retention limit (Sprint 8 audit fix)
+        // Keep only the most recent N entries per project
+        const historyLimit = VALIDATION.ANALYSIS_HISTORY_LIMIT || 20;
+        await sql`
+          DELETE FROM project_analysis_history
+          WHERE project_id = ${projectId}
+            AND id NOT IN (
+              SELECT id FROM project_analysis_history
+              WHERE project_id = ${projectId}
+              ORDER BY created_at DESC
+              LIMIT ${historyLimit}
+            )
+        `;
       } catch (historyError) {
         logger.warn('Failed to save analysis history', { error: historyError.message });
         // Don't fail the request if history save fails - it's a secondary feature
@@ -1291,10 +1366,18 @@ router.post('/summary', validateSummary, async (req, res) => {
       });
     }
 
-    res.status(500).json({
-      summary: 'Failed to generate analysis. Please try again later.',
-      error: error.message
-    });
+    // Sprint 8 security fix: Don't expose internal error details in production
+    const errorResponse = {
+      summary: 'Failed to generate analysis. Please try again later.'
+    };
+
+    // Only include error details in non-production environments
+    if (!IS_PRODUCTION) {
+      errorResponse.error = error.message;
+      errorResponse.stack = error.stack;
+    }
+
+    res.status(500).json(errorResponse);
   }
 });
 
@@ -1473,6 +1556,198 @@ router.post('/chat', validateChat, async (req, res) => {
       res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
       res.end();
     }
+  }
+});
+
+// ==========================================
+// Dashboard Enhancement: Cross-Project Recommendations
+// ==========================================
+
+// POST /api/gemini/recommendations - Generate AI recommendations for cross-project insights
+router.post('/recommendations', validateSummary, async (req, res) => {
+  try {
+    const { analyticsData } = req.body; // Cross-project analytics from /api/analytics/cross-project
+
+    if (!analyticsData) {
+      return res.status(400).json({ error: 'Analytics data is required' });
+    }
+
+    // Generate data hash for caching (24-hour TTL)
+    const dataHash = crypto
+      .createHash('md5')
+      .update(JSON.stringify(analyticsData))
+      .digest('hex');
+
+    // Check for cached recommendations (24-hour TTL)
+    try {
+      const [cached] = await sql`
+        SELECT recommendations, metrics, created_at
+        FROM cross_project_recommendations
+        WHERE expires_at > CURRENT_TIMESTAMP
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+
+      if (cached) {
+        logger.info('Returning cached cross-project recommendations');
+        return res.json({
+          recommendations: cached.recommendations,
+          metrics: cached.metrics,
+          cached: true,
+          generatedAt: cached.created_at
+        });
+      }
+    } catch (cacheError) {
+      logger.warn('Cache lookup failed, generating fresh recommendations', { error: cacheError.message });
+    }
+
+    // Initialize AI client
+    const ai = new GoogleGenAI({ apiKey: GEMINI_CONFIG.API_KEY });
+
+    let retryCount = 0;
+    const aiStartTime = Date.now();
+
+    // Calculate additional metrics for prompt
+    const stemPremium = analyticsData.stemCount > 0 && analyticsData.nonStemCount > 0
+      ? Math.round((analyticsData.avgTuition * analyticsData.stemPercentage / 100) - (analyticsData.avgTuition * (100 - analyticsData.stemPercentage) / 100))
+      : 0;
+
+    const medianTuition = Math.round((analyticsData.tuitionRange.min + analyticsData.tuitionRange.max) / 2);
+
+    // Build AI prompt for recommendations
+    const prompt = `You are a higher education market analyst specializing in graduate program pricing strategy. Analyze this cross-project tuition intelligence data and provide strategic recommendations.
+
+## Market Data:
+- Total Programs Analyzed: ${analyticsData.totalPrograms}
+- Average Tuition: $${analyticsData.avgTuition.toLocaleString()}
+- Tuition Range: $${analyticsData.tuitionRange.min.toLocaleString()} - $${analyticsData.tuitionRange.max.toLocaleString()}
+- STEM Programs: ${analyticsData.stemCount} (${analyticsData.stemPercentage}%)
+- Non-STEM Programs: ${analyticsData.nonStemCount}
+- Recent Activity (Last 7 Days): ${analyticsData.recentExtractions} new extractions
+
+## Project Breakdown:
+${analyticsData.projectBreakdown.map(p =>
+  `- **${p.name}**: ${p.count} programs, Avg: $${p.avgTuition.toLocaleString()}`
+).join('\n')}
+
+## Your Task:
+Provide 5-7 strategic recommendations in markdown format. Focus on:
+
+1. **Pricing Positioning**: Identify programs with pricing advantages or gaps
+2. **STEM vs Non-STEM Trends**: Analyze pricing premiums and market dynamics
+3. **Competitive Gaps**: Find underserved market segments or opportunities
+4. **Data Quality Actions**: Suggest improvements to data freshness or coverage
+5. **Strategic Next Steps**: Actionable recommendations for decision-makers
+
+## Format Requirements:
+- Use markdown bullet points (-)
+- Start each recommendation with a **bold category** (e.g., **Pricing Gap:**)
+- Include specific numbers and program names where relevant
+- Keep each recommendation to 1-2 sentences
+- Focus on actionable insights, not generic observations
+- Example: "**Market Opportunity:** Your lowest tuition program ($32K at Georgetown MBA) is 15% below market average - consider highlighting in marketing materials"
+
+**CRITICAL:** Output ONLY the recommendations as a markdown list. No introduction, no conclusion section, no meta-commentary. Start directly with the first recommendation.`;
+
+    // Execute with retry logic for transient failures
+    let response;
+    try {
+      response = await withRetry(
+        async () => {
+          retryCount++;
+          return await ai.models.generateContent({
+            model: GEMINI_CONFIG.MODEL,
+            contents: prompt,
+          });
+        },
+        'recommendations'
+      );
+      retryCount = Math.max(0, retryCount - 1); // Subtract 1 (first attempt not a retry)
+    } catch (error) {
+      const aiResponseTime = Date.now() - aiStartTime;
+
+      // Log AI usage failure
+      await logAiUsage({
+        endpoint: '/api/gemini/recommendations',
+        model: GEMINI_CONFIG.MODEL,
+        operationType: 'recommendations',
+        aiResponseTime: aiResponseTime,
+        retryCount: retryCount,
+        success: false,
+        error: error,
+        requestMetadata: {
+          totalPrograms: analyticsData.totalPrograms,
+          projectCount: analyticsData.projectBreakdown.length
+        }
+      });
+
+      throw error;
+    }
+
+    const recommendations = response.text || 'No recommendations generated.';
+
+    // Build response object
+    const responseData = {
+      recommendations,
+      metrics: {
+        avgTuition: analyticsData.avgTuition,
+        stemPremium,
+        medianTuition
+      },
+      cached: false,
+      generatedAt: new Date().toISOString()
+    };
+
+    // Cache the response (24-hour TTL)
+    try {
+      const cacheId = `recommendations-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      await sql`
+        INSERT INTO cross_project_recommendations (id, recommendations, metrics, created_at, expires_at)
+        VALUES (
+          ${cacheId},
+          ${recommendations},
+          ${JSON.stringify(responseData.metrics)},
+          CURRENT_TIMESTAMP,
+          CURRENT_TIMESTAMP + interval '24 hours'
+        )
+      `;
+      logger.info('Cached cross-project recommendations');
+    } catch (cacheError) {
+      logger.warn('Failed to cache recommendations', { error: cacheError.message });
+    }
+
+    // Log AI usage success
+    const aiResponseTime = Date.now() - aiStartTime;
+    const usage = response.usageMetadata || {};
+    const inputTokens = usage.promptTokenCount || Math.ceil(prompt.length / 4);
+    const outputTokens = usage.candidatesTokenCount || Math.ceil(recommendations.length / 4);
+
+    await logAiUsage({
+      endpoint: '/api/gemini/recommendations',
+      model: GEMINI_CONFIG.MODEL,
+      operationType: 'recommendations',
+      inputTokens: inputTokens,
+      outputTokens: outputTokens,
+      aiResponseTime: aiResponseTime,
+      retryCount: retryCount,
+      success: true,
+      requestMetadata: {
+        totalPrograms: analyticsData.totalPrograms,
+        projectCount: analyticsData.projectBreakdown.length
+      },
+      responseMetadata: {
+        recommendationLength: recommendations.length
+      }
+    });
+
+    res.json(responseData);
+
+  } catch (error) {
+    logger.error('Error generating recommendations', error);
+    res.status(500).json({
+      error: 'Failed to generate recommendations',
+      message: error.message
+    });
   }
 });
 

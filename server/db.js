@@ -706,9 +706,178 @@ export async function initializeDatabase() {
       logger.debug('Index: idx_project_analytics_project_id already exists');
     }
 
+    // ==========================================
+    // Dashboard Enhancement: Cross-Project Recommendations Table
+    // ==========================================
+
+    // Create cross_project_recommendations table for caching AI recommendations (24-hour TTL)
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS cross_project_recommendations (
+          id TEXT PRIMARY KEY,
+          user_id TEXT,
+          recommendations TEXT NOT NULL,
+          metrics JSONB NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          expires_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP + interval '24 hours')
+        )
+      `;
+      logger.info('Table: cross_project_recommendations created');
+    } catch (error) {
+      logger.debug('Table: cross_project_recommendations already exists');
+    }
+
+    // Create index for recommendations lookup by user and expiration
+    try {
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_recommendations_user_expires
+        ON cross_project_recommendations(user_id, expires_at DESC)
+      `;
+      logger.info('Index: idx_recommendations_user_expires created');
+    } catch (error) {
+      logger.debug('Index: idx_recommendations_user_expires already exists');
+    }
+
+    // Create index for cleaning up expired recommendations
+    try {
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_recommendations_expires
+        ON cross_project_recommendations(expires_at)
+      `;
+      logger.info('Index: idx_recommendations_expires created');
+    } catch (error) {
+      logger.debug('Index: idx_recommendations_expires already exists');
+    }
+
     logger.info('Database schema initialized successfully');
   } catch (error) {
     logger.error('Database initialization error', error);
+    throw error;
+  }
+}
+
+// ==========================================
+// Database Cleanup Utilities (Sprint 8)
+// ==========================================
+
+/**
+ * Cleans up stale/expired cache entries from various tables.
+ * Should be called periodically (e.g., daily) to prevent database bloat.
+ *
+ * @returns {Object} Cleanup statistics
+ */
+export async function cleanupStaleCaches() {
+  const stats = {
+    summaries: 0,
+    recommendations: 0,
+    apiLogs: 0,
+    aiLogs: 0,
+    errors: []
+  };
+
+  try {
+    // 1. Clean up expired project summaries (past expires_at)
+    const summariesResult = await sql`
+      DELETE FROM project_summaries
+      WHERE expires_at < CURRENT_TIMESTAMP
+      RETURNING id
+    `;
+    stats.summaries = summariesResult.length;
+    logger.info(`Cleanup: Removed ${stats.summaries} expired project summaries`);
+  } catch (error) {
+    stats.errors.push({ table: 'project_summaries', error: error.message });
+    logger.warn('Cleanup: Failed to clean project_summaries', { error: error.message });
+  }
+
+  try {
+    // 2. Clean up expired cross-project recommendations
+    const recommendationsResult = await sql`
+      DELETE FROM cross_project_recommendations
+      WHERE expires_at < CURRENT_TIMESTAMP
+      RETURNING id
+    `;
+    stats.recommendations = recommendationsResult.length;
+    logger.info(`Cleanup: Removed ${stats.recommendations} expired recommendations`);
+  } catch (error) {
+    stats.errors.push({ table: 'cross_project_recommendations', error: error.message });
+    logger.warn('Cleanup: Failed to clean cross_project_recommendations', { error: error.message });
+  }
+
+  try {
+    // 3. Clean up old API logs (older than 30 days)
+    const apiLogsResult = await sql`
+      DELETE FROM api_logs
+      WHERE created_at < CURRENT_TIMESTAMP - interval '30 days'
+      RETURNING id
+    `;
+    stats.apiLogs = apiLogsResult.length;
+    logger.info(`Cleanup: Removed ${stats.apiLogs} old API logs (>30 days)`);
+  } catch (error) {
+    stats.errors.push({ table: 'api_logs', error: error.message });
+    logger.warn('Cleanup: Failed to clean api_logs', { error: error.message });
+  }
+
+  try {
+    // 4. Clean up old AI usage logs (older than 90 days)
+    const aiLogsResult = await sql`
+      DELETE FROM ai_usage_logs
+      WHERE created_at < CURRENT_TIMESTAMP - interval '90 days'
+      RETURNING id
+    `;
+    stats.aiLogs = aiLogsResult.length;
+    logger.info(`Cleanup: Removed ${stats.aiLogs} old AI usage logs (>90 days)`);
+  } catch (error) {
+    stats.errors.push({ table: 'ai_usage_logs', error: error.message });
+    logger.warn('Cleanup: Failed to clean ai_usage_logs', { error: error.message });
+  }
+
+  return stats;
+}
+
+/**
+ * Gets current cache statistics for monitoring.
+ *
+ * @returns {Object} Cache statistics
+ */
+export async function getCacheStats() {
+  try {
+    const [summaries] = await sql`
+      SELECT
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE expires_at > CURRENT_TIMESTAMP) as valid,
+        COUNT(*) FILTER (WHERE expires_at <= CURRENT_TIMESTAMP) as expired
+      FROM project_summaries
+    `;
+
+    const [recommendations] = await sql`
+      SELECT
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE expires_at > CURRENT_TIMESTAMP) as valid,
+        COUNT(*) FILTER (WHERE expires_at <= CURRENT_TIMESTAMP) as expired
+      FROM cross_project_recommendations
+    `;
+
+    const [analysisHistory] = await sql`
+      SELECT COUNT(*) as total FROM project_analysis_history
+    `;
+
+    return {
+      summaries: {
+        total: parseInt(summaries?.total || 0),
+        valid: parseInt(summaries?.valid || 0),
+        expired: parseInt(summaries?.expired || 0)
+      },
+      recommendations: {
+        total: parseInt(recommendations?.total || 0),
+        valid: parseInt(recommendations?.valid || 0),
+        expired: parseInt(recommendations?.expired || 0)
+      },
+      analysisHistory: {
+        total: parseInt(analysisHistory?.total || 0)
+      }
+    };
+  } catch (error) {
+    logger.error('Failed to get cache stats', { error: error.message });
     throw error;
   }
 }

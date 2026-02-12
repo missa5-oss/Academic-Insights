@@ -48,6 +48,8 @@ export const RATE_LIMITS = {
 export const DEFAULT_CORS_ORIGINS = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
 ];
@@ -70,6 +72,10 @@ export const VALIDATION = {
   PROGRAM_NAME_MAX_LENGTH: 500,
   BULK_BATCH_SIZE: 100,
   RAW_CONTENT_MAX_LENGTH: 10000,
+  SUMMARY_MAX_ITEMS: 100,        // Max results for executive summary
+  SUMMARY_OPTIMAL_ITEMS: 50,    // Optimal limit before performance warning
+  REMARKS_MAX_LENGTH: 1000,     // Max length for user remarks
+  ANALYSIS_HISTORY_LIMIT: 20,   // Max history entries per project
 };
 
 // Logging Configuration

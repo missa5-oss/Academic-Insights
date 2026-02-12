@@ -234,16 +234,102 @@ export const validateChat = (req, res, next) => {
 
 /**
  * Validate summary request
+ * Enhanced validation to prevent prompt injection and DoS attacks (Sprint 8 audit)
  */
 export const validateSummary = (req, res, next) => {
-  const { data } = req.body;
+  const { data, projectId, forceRefresh } = req.body;
 
+  // Basic type validation
   if (!Array.isArray(data)) {
     return errorResponse(res, 'VALIDATION_ERROR', 'Data must be an array');
   }
 
   if (data.length === 0) {
     return errorResponse(res, 'VALIDATION_ERROR', 'Data array cannot be empty');
+  }
+
+  // Enforce maximum array size to prevent DoS
+  if (data.length > VALIDATION.SUMMARY_MAX_ITEMS) {
+    return errorResponse(
+      res,
+      'BATCH_SIZE_EXCEEDED',
+      `Data array exceeds maximum of ${VALIDATION.SUMMARY_MAX_ITEMS} items`,
+      { maxItems: VALIDATION.SUMMARY_MAX_ITEMS, receivedItems: data.length }
+    );
+  }
+
+  // Validate projectId if provided
+  if (projectId !== undefined && projectId !== null) {
+    if (typeof projectId !== 'string' || projectId.length > 100) {
+      return errorResponse(res, 'VALIDATION_ERROR', 'Invalid projectId format');
+    }
+  }
+
+  // Validate forceRefresh if provided
+  if (forceRefresh !== undefined && typeof forceRefresh !== 'boolean') {
+    return errorResponse(res, 'VALIDATION_ERROR', 'forceRefresh must be a boolean');
+  }
+
+  // Validate each item in the data array
+  const errors = [];
+  const allowedKeys = new Set([
+    'id', 'school_name', 'program_name', 'tuition_amount', 'cost_per_credit',
+    'total_credits', 'program_length_months', 'program_length', 'academic_year', 'tuition_period',
+    'is_stem', 'status', 'confidence_score', 'remarks', 'source_url',
+    'raw_content', 'validated_sources', 'verification_data', 'verification_status',
+    'location_data', 'stated_tuition', 'calculated_total_cost', 'additional_fees',
+    'actual_program_name', 'project_id', 'extracted_at', 'updated_at',
+    'extraction_version', 'is_flagged', 'user_comments', 'retry_count',
+    'extraction_date', 'confidence_details', 'source_validation', 'verification'
+  ]);
+
+  for (let i = 0; i < data.length; i++) {
+    const item = data[i];
+
+    // Must be an object
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      errors.push(`Item at index ${i}: must be an object`);
+      continue;
+    }
+
+    // Check for unknown keys (potential injection vectors)
+    const itemKeys = Object.keys(item);
+    const unknownKeys = itemKeys.filter(k => !allowedKeys.has(k));
+    if (unknownKeys.length > 0) {
+      errors.push(`Item at index ${i}: unknown fields: ${unknownKeys.join(', ')}`);
+    }
+
+    // Required fields
+    if (!item.school_name || typeof item.school_name !== 'string') {
+      errors.push(`Item at index ${i}: school_name is required and must be a string`);
+    } else if (item.school_name.length > VALIDATION.SCHOOL_NAME_MAX_LENGTH) {
+      errors.push(`Item at index ${i}: school_name exceeds ${VALIDATION.SCHOOL_NAME_MAX_LENGTH} characters`);
+    }
+
+    if (!item.program_name || typeof item.program_name !== 'string') {
+      errors.push(`Item at index ${i}: program_name is required and must be a string`);
+    } else if (item.program_name.length > VALIDATION.PROGRAM_NAME_MAX_LENGTH) {
+      errors.push(`Item at index ${i}: program_name exceeds ${VALIDATION.PROGRAM_NAME_MAX_LENGTH} characters`);
+    }
+
+    // Optional field length validation
+    if (item.remarks && typeof item.remarks === 'string' && item.remarks.length > VALIDATION.REMARKS_MAX_LENGTH) {
+      errors.push(`Item at index ${i}: remarks exceeds ${VALIDATION.REMARKS_MAX_LENGTH} characters`);
+    }
+
+    if (item.raw_content && typeof item.raw_content === 'string' && item.raw_content.length > VALIDATION.RAW_CONTENT_MAX_LENGTH) {
+      errors.push(`Item at index ${i}: raw_content exceeds ${VALIDATION.RAW_CONTENT_MAX_LENGTH} characters`);
+    }
+
+    // Stop after 10 errors to avoid overwhelming response
+    if (errors.length >= 10) {
+      errors.push('...and more errors. Please fix the above issues first.');
+      break;
+    }
+  }
+
+  if (errors.length > 0) {
+    return errorResponse(res, 'VALIDATION_ERROR', errors[0], { errors });
   }
 
   next();

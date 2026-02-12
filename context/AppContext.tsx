@@ -1,8 +1,7 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo } from 'react';
-import { Project, ExtractionResult, ExtractionStatus, ConfidenceScore, User } from '../types';
+import { Project, ExtractionResult, ExtractionStatus, ConfidenceScore, User, TrendData, CrossProjectAnalytics, MarketPositionData, TuitionDistributionBin, RecommendationsResponse, DataQualityMetrics, ActivityTrendData } from '../types';
 import { API_URL } from '@/src/config';
-import { TrendData } from '../types';
 
 /**
  * Type definition for the App context value.
@@ -24,6 +23,14 @@ interface AppContextType {
   getResultHistory: (id: string) => Promise<ExtractionResult[]>;
   createNewVersion: (id: string, newData: Partial<ExtractionResult>) => Promise<void>;
   getTrendsData: (projectId: string) => Promise<TrendData[]>;
+
+  // Dashboard Enhancement: Cross-Project Analytics
+  getCrossProjectAnalytics: () => Promise<CrossProjectAnalytics | null>;
+  getMarketPositionData: () => Promise<MarketPositionData[]>;
+  getTuitionDistribution: () => Promise<TuitionDistributionBin[]>;
+  getDataQuality: () => Promise<DataQualityMetrics | null>;
+  getRecentActivity: () => Promise<ActivityTrendData[]>;
+  getMarketRecommendations: (analyticsData: CrossProjectAnalytics) => Promise<RecommendationsResponse>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -436,6 +443,125 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  // ==========================================
+  // Dashboard Enhancement: Cross-Project Analytics Methods
+  // ==========================================
+
+  /**
+   * Fetches cross-project analytics aggregates.
+   * @returns Cross-project analytics data or null on error
+   */
+  const getCrossProjectAnalytics = async (): Promise<CrossProjectAnalytics | null> => {
+    try {
+      const response = await fetch(`${API_URL}/api/analytics/cross-project`);
+      if (response.ok) {
+        return await response.json();
+      }
+      console.error('Failed to fetch cross-project analytics');
+      return null;
+    } catch (error) {
+      console.error('Failed to fetch cross-project analytics:', error);
+      return null;
+    }
+  };
+
+  /**
+   * Fetches market position data for scatter plot visualization.
+   * @returns Array of market position data points
+   */
+  const getMarketPositionData = async (): Promise<MarketPositionData[]> => {
+    try {
+      const response = await fetch(`${API_URL}/api/analytics/market-position`);
+      if (response.ok) {
+        const result = await response.json();
+        return result.data || [];
+      }
+      return [];
+    } catch (error) {
+      console.error('Failed to fetch market position data:', error);
+      return [];
+    }
+  };
+
+  /**
+   * Fetches tuition distribution histogram data.
+   * @returns Array of distribution bins
+   */
+  const getTuitionDistribution = async (): Promise<TuitionDistributionBin[]> => {
+    try {
+      const response = await fetch(`${API_URL}/api/analytics/tuition-distribution`);
+      if (response.ok) {
+        const result = await response.json();
+        return result.bins || [];
+      }
+      return [];
+    } catch (error) {
+      console.error('Failed to fetch tuition distribution:', error);
+      return [];
+    }
+  };
+
+  /**
+   * Fetches data quality metrics.
+   * @returns Data quality metrics or null on error
+   */
+  const getDataQuality = async (): Promise<DataQualityMetrics | null> => {
+    try {
+      const response = await fetch(`${API_URL}/api/analytics/data-quality`);
+      if (response.ok) {
+        return await response.json();
+      }
+      return null;
+    } catch (error) {
+      console.error('Failed to fetch data quality:', error);
+      return null;
+    }
+  };
+
+  /**
+   * Fetches recent activity trend data (last 30 days).
+   * @returns Array of activity trend data points
+   */
+  const getRecentActivity = async (): Promise<ActivityTrendData[]> => {
+    try {
+      const response = await fetch(`${API_URL}/api/analytics/recent-activity`);
+      if (response.ok) {
+        const result = await response.json();
+        return result.data || [];
+      }
+      return [];
+    } catch (error) {
+      console.error('Failed to fetch recent activity:', error);
+      return [];
+    }
+  };
+
+  /**
+   * Generates AI-powered market recommendations based on cross-project analytics.
+   * @param analyticsData - Cross-project analytics data
+   * @returns Recommendations response with markdown-formatted insights
+   */
+  const getMarketRecommendations = async (analyticsData: CrossProjectAnalytics): Promise<RecommendationsResponse> => {
+    try {
+      const response = await fetch(`${API_URL}/api/gemini/recommendations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ analyticsData }),
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      throw new Error('Failed to generate recommendations');
+    } catch (error) {
+      console.error('Failed to fetch market recommendations:', error);
+      throw error;
+    }
+  };
+
   // Memoize context value to prevent unnecessary re-renders of consumers
   const contextValue = useMemo(() => ({
     user,
@@ -452,7 +578,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     restoreData,
     getResultHistory,
     createNewVersion,
-    getTrendsData
+    getTrendsData,
+    getCrossProjectAnalytics,
+    getMarketPositionData,
+    getTuitionDistribution,
+    getDataQuality,
+    getRecentActivity,
+    getMarketRecommendations
   }), [user, projects, results]);
 
   return (

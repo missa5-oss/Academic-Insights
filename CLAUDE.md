@@ -312,7 +312,7 @@ node server/check-sources.js           # Recent extractions
 
 ## Recent Development Status
 
-**Current Version**: v1.6.0 (January 28, 2026)
+**Current Version**: v1.7.0 (February 3, 2026)
 
 **Completed Sprints**:
 - ✅ **Phase 1-2**: Agentic extraction with verification agent + program variations retry (Dec 16, 2025)
@@ -321,6 +321,7 @@ node server/check-sources.js           # Recent extractions
 - ✅ **Sprint 4**: Performance & polish - Utility modules, TypeScript completion, search optimization (Dec 12, 2025)
 - ✅ **Sprint 5**: Database & Backend Performance - Bulk insert optimization, caching, materialized views, query monitoring (Jan 27, 2026) ✅ COMPLETE
 - ✅ **Sprint 6**: Frontend Rendering Performance - Code splitting, lazy loading, pagination, memoization (Jan 28, 2026) ✅ COMPLETE
+- ✅ **Sprint 7**: Dashboard Enhancement - Cross-project analytics, AI recommendations, market intelligence (Feb 3, 2026) ✅ COMPLETE
 
 **Key Learnings**:
 - Gemini grounding chunks sometimes empty (~20% of cases) - always provide fallback summary
@@ -355,6 +356,48 @@ node server/check-sources.js           # Recent extractions
 - ✅ Bundle analysis: Main bundle 268KB (83KB gzipped) - production-ready performance
 - ✅ Virtual scrolling skipped: Pagination makes it redundant
 - ✅ Bundle optimization skipped: 83KB gzipped is excellent (target was <500KB)
+
+**Sprint 7 Dashboard Enhancement** (February 3, 2026) ✅ COMPLETE:
+- ✅ **Cross-Project Analytics** (5 new endpoints):
+  - `/api/analytics/cross-project` - Aggregate stats across all projects (avg tuition, range, STEM %, recent activity)
+  - `/api/analytics/market-position` - Scatter plot data (tuition vs STEM designation)
+  - `/api/analytics/tuition-distribution` - Histogram bins ($0-30k, $30-50k, $50-70k, $70k+)
+  - `/api/analytics/data-quality` - Health metrics (success rate, stale data, flagged count)
+  - `/api/analytics/recent-activity` - 30-day extraction trends
+- ✅ **AI Market Recommendations**: `/api/gemini/recommendations` endpoint generates strategic insights with 24-hour caching
+- ✅ **Enhanced Dashboard UI**:
+  - 5 hero stat cards: Total Programs, Avg Tuition, Market Range, STEM %, Recent Extractions (7 days)
+  - 2x2 chart grid: Market Positioning Matrix, Tuition Distribution, STEM Comparison, Recent Activity
+  - AI Recommendations Panel with collapsible markdown-rendered insights
+  - Project cards with mini bar charts showing tuition distribution
+  - Stale data indicators (>30 days) on project cards
+- ✅ **New Components** (6 files):
+  - `components/charts/MarketPositionChart.tsx` - Scatter plot (STEM vs tuition)
+  - `components/charts/TuitionDistributionChart.tsx` - Histogram (4 bins with color coding)
+  - `components/charts/StemComparisonChart.tsx` - Bar chart (STEM vs Non-STEM comparison)
+  - `components/charts/RecentActivityChart.tsx` - Line chart (30-day success/failure trends)
+  - `components/RecommendationsPanel.tsx` - AI insights card with generate/refresh
+  - `components/ProjectCard.tsx` - Enhanced project card with mini chart and health indicators
+- ✅ **AppContext Methods** (6 new):
+  - `getCrossProjectAnalytics()` - Fetch aggregate analytics
+  - `getMarketPositionData()` - Fetch scatter plot data
+  - `getTuitionDistribution()` - Fetch histogram bins
+  - `getDataQuality()` - Fetch health metrics
+  - `getRecentActivity()` - Fetch 30-day trends
+  - `getMarketRecommendations(analyticsData)` - Generate AI recommendations
+- ✅ **TypeScript Types** (6 new interfaces in `types.ts`):
+  - `CrossProjectAnalytics`, `MarketPositionData`, `TuitionDistributionBin`
+  - `RecommendationsResponse`, `DataQualityMetrics`, `ActivityTrendData`
+- ✅ **Database**: New `cross_project_recommendations` table with 24-hour TTL and expiration indexes
+- ✅ **Removed Confidence Chart**: Per user feedback, removed from ProjectDetail Analysis View (confidence validated before data entry)
+- ✅ **Performance**: All analytics endpoints use 5-minute response caching (Sprint 5 pattern), lazy-loaded charts
+
+**Key Learnings (Sprint 7)**:
+- **Confidence removal justified**: Data quality should be validated before entry, not visualized post-facto
+- **Cross-project insights**: Users need market-level benchmarks, not just project-specific metrics
+- **AI recommendations**: Strategic insights across all projects provide actionable next steps
+- **Mini charts on cards**: Quick visual context improves project health assessment at-a-glance
+- **Stale data indicators**: Amber badges for >30-day-old extractions prompt timely refreshes
 
 ## Documentation
 

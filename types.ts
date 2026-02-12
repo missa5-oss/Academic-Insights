@@ -439,3 +439,83 @@ export interface AiCostBreakdown {
   }>;
   period: string;
 }
+
+// ==========================================
+// Dashboard Enhancement: Cross-Project Analytics Types
+// ==========================================
+
+/**
+ * Cross-project analytics aggregates (Dashboard hero stats)
+ */
+export interface CrossProjectAnalytics {
+  avgTuition: number;
+  tuitionRange: { min: number; max: number };
+  totalPrograms: number;
+  stemPercentage: number;
+  stemCount: number;
+  nonStemCount: number;
+  recentExtractions: number; // Last 7 days
+  projectBreakdown: Array<{
+    projectId: string;
+    name: string;
+    avgTuition: number;
+    count: number;
+  }>;
+}
+
+/**
+ * Market positioning data for scatter plot
+ */
+export interface MarketPositionData {
+  tuition: number;
+  isStem: boolean;
+  school: string;
+  program: string;
+  projectId: string;
+  projectName: string;
+}
+
+/**
+ * Tuition distribution histogram bin
+ */
+export interface TuitionDistributionBin {
+  range: string; // e.g., "30-50k"
+  count: number;
+  percentage: number;
+}
+
+/**
+ * AI-generated market recommendations response
+ */
+export interface RecommendationsResponse {
+  recommendations: string; // Markdown formatted
+  metrics: {
+    avgTuition: number;
+    stemPremium: number;
+    medianTuition: number;
+  };
+  cached: boolean;
+  generatedAt: string;
+}
+
+/**
+ * Data quality metrics for dashboard
+ */
+export interface DataQualityMetrics {
+  successRate: number; // Percentage
+  staleDays: number; // Average age of extractions
+  flaggedCount: number;
+  failedCount: number;
+  pendingCount: number;
+  statusBreakdown: Record<string, number>; // e.g., { "Success": 112, "Pending": 3 }
+}
+
+/**
+ * Recent activity trend data (30 days)
+ */
+export interface ActivityTrendData {
+  date: string; // YYYY-MM-DD
+  successCount: number;
+  failureCount: number;
+  totalCount: number;
+}

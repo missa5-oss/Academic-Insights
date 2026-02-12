@@ -25,7 +25,14 @@
       "Bash(npm run build:*)",
       "Bash(npm install:*)",
       "Bash(lsof:*)",
-      "Bash(xargs kill:*)"
+      "Bash(xargs kill:*)",
+      "Bash(ping:*)",
+      "Bash(cd:*)",
+      "Bash(node --check:*)",
+      "Bash(timeout /t 5)",
+      "Bash(node index.js:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(timeout:*)"
     ]
   }
 }

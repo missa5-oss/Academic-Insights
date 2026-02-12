@@ -7,7 +7,7 @@
 
 import express from 'express';
 import os from 'os';
-import { sql } from '../db.js';
+import { sql, cleanupStaleCaches, getCacheStats } from '../db.js';
 import logger from '../utils/logger.js';
 import { APP_VERSION } from '../config.js';
 import { getApiAnalytics } from '../middleware/apiLogger.js';
@@ -742,6 +742,49 @@ router.get('/ai-extraction-details', async (req, res) => {
   } catch (error) {
     logger.error('Failed to get extraction details', error);
     res.status(500).json({ error: 'Failed to retrieve extraction details' });
+  }
+});
+
+// ==========================================
+// Cache Management (Sprint 8 Audit)
+// ==========================================
+
+/**
+ * GET /api/admin/cache-stats
+ * Get current cache statistics for monitoring
+ * Sprint 8: Executive Summary Agent Audit
+ */
+router.get('/cache-stats', async (req, res) => {
+  try {
+    const stats = await getCacheStats();
+    res.json({
+      ...stats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Failed to get cache stats', error);
+    res.status(500).json({ error: 'Failed to retrieve cache statistics' });
+  }
+});
+
+/**
+ * POST /api/admin/cache-cleanup
+ * Trigger manual cleanup of stale caches
+ * Sprint 8: Executive Summary Agent Audit
+ */
+router.post('/cache-cleanup', async (req, res) => {
+  try {
+    logger.info('Manual cache cleanup triggered');
+    const stats = await cleanupStaleCaches();
+
+    res.json({
+      message: 'Cache cleanup completed',
+      stats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Failed to cleanup caches', error);
+    res.status(500).json({ error: 'Failed to cleanup caches' });
   }
 });
 

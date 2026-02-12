@@ -553,6 +553,377 @@ router.post('/:id/new-version', async (req, res) => {
   }
 });
 
+// ==========================================
+// Dashboard Enhancement: Cross-Project Analytics Endpoints
+// NOTE: These static routes MUST come BEFORE the dynamic :projectId route
+// ==========================================
+
+// GET /api/analytics/cross-project - Aggregate stats across all projects
+router.get('/analytics/cross-project', async (req, res) => {
+  try {
+    const cacheKey = 'cross-project-analytics';
+
+    // Check cache first (5-minute TTL)
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      setCacheHeaders(res, 300);
+      res.set('X-Cache-Status', 'HIT');
+      return res.json(cached);
+    }
+
+    setCacheHeaders(res, 300);
+    res.set('X-Cache-Status', 'MISS');
+
+    // Get all successful results across all projects
+    const results = await sql`
+      SELECT
+        r.tuition_amount,
+        r.is_stem,
+        r.extracted_at,
+        r.project_id,
+        p.name as project_name
+      FROM extraction_results r
+      JOIN projects p ON r.project_id = p.id
+      WHERE r.status = 'Success'
+        AND r.tuition_amount IS NOT NULL
+    `;
+
+    // Parse tuition amounts
+    const tuitionValues = results
+      .map(r => ({
+        ...r,
+        parsedAmount: parseFloat(r.tuition_amount.replace(/[^0-9.]/g, '') || '0')
+      }))
+      .filter(r => r.parsedAmount > 0);
+
+    let analyticsData;
+
+    if (tuitionValues.length === 0) {
+      analyticsData = {
+        avgTuition: 0,
+        tuitionRange: { min: 0, max: 0 },
+        totalPrograms: 0,
+        stemPercentage: 0,
+        stemCount: 0,
+        nonStemCount: 0,
+        recentExtractions: 0,
+        projectBreakdown: []
+      };
+    } else {
+      // Calculate aggregate statistics
+      const sum = tuitionValues.reduce((acc, r) => acc + r.parsedAmount, 0);
+      const avgTuition = Math.round(sum / tuitionValues.length);
+
+      const minTuition = Math.min(...tuitionValues.map(r => r.parsedAmount));
+      const maxTuition = Math.max(...tuitionValues.map(r => r.parsedAmount));
+
+      const stemCount = tuitionValues.filter(r => r.is_stem === true).length;
+      const nonStemCount = tuitionValues.filter(r => r.is_stem === false).length;
+      const stemPercentage = Math.round((stemCount / tuitionValues.length) * 100);
+
+      // Count recent extractions (last 7 days)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const recentExtractions = tuitionValues.filter(r =>
+        new Date(r.extracted_at) >= sevenDaysAgo
+      ).length;
+
+      // Project breakdown
+      const projectMap = new Map();
+      tuitionValues.forEach(r => {
+        if (!projectMap.has(r.project_id)) {
+          projectMap.set(r.project_id, {
+            projectId: r.project_id,
+            name: r.project_name,
+            sum: 0,
+            count: 0
+          });
+        }
+        const project = projectMap.get(r.project_id);
+        project.sum += r.parsedAmount;
+        project.count += 1;
+      });
+
+      const projectBreakdown = Array.from(projectMap.values()).map(p => ({
+        projectId: p.projectId,
+        name: p.name,
+        avgTuition: Math.round(p.sum / p.count),
+        count: p.count
+      }));
+
+      analyticsData = {
+        avgTuition,
+        tuitionRange: { min: Math.round(minTuition), max: Math.round(maxTuition) },
+        totalPrograms: tuitionValues.length,
+        stemPercentage,
+        stemCount,
+        nonStemCount,
+        recentExtractions,
+        projectBreakdown
+      };
+    }
+
+    // Cache for 5 minutes
+    cache.set(cacheKey, analyticsData, 5 * 60 * 1000);
+
+    res.json(analyticsData);
+  } catch (error) {
+    logger.error('Error fetching cross-project analytics', error);
+    res.status(500).json({ error: 'Failed to fetch cross-project analytics' });
+  }
+});
+
+// GET /api/analytics/market-position - Data for scatter plot
+router.get('/analytics/market-position', async (req, res) => {
+  try {
+    const cacheKey = 'market-position-data';
+
+    // Check cache first (5-minute TTL)
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      setCacheHeaders(res, 300);
+      res.set('X-Cache-Status', 'HIT');
+      return res.json(cached);
+    }
+
+    setCacheHeaders(res, 300);
+    res.set('X-Cache-Status', 'MISS');
+
+    // Get all successful results with tuition data
+    const results = await sql`
+      SELECT
+        r.tuition_amount,
+        r.is_stem,
+        r.school_name,
+        r.program_name,
+        r.project_id,
+        p.name as project_name
+      FROM extraction_results r
+      JOIN projects p ON r.project_id = p.id
+      WHERE r.status = 'Success'
+        AND r.tuition_amount IS NOT NULL
+    `;
+
+    // Parse and format data for scatter plot
+    const data = results
+      .map(r => {
+        const tuition = parseFloat(r.tuition_amount.replace(/[^0-9.]/g, '') || '0');
+        if (tuition <= 0) return null;
+        return {
+          tuition,
+          isStem: r.is_stem || false,
+          school: r.school_name,
+          program: r.program_name,
+          projectId: r.project_id,
+          projectName: r.project_name
+        };
+      })
+      .filter(r => r !== null);
+
+    const response = { data };
+
+    // Cache for 5 minutes
+    cache.set(cacheKey, response, 5 * 60 * 1000);
+
+    res.json(response);
+  } catch (error) {
+    logger.error('Error fetching market position data', error);
+    res.status(500).json({ error: 'Failed to fetch market position data' });
+  }
+});
+
+// GET /api/analytics/tuition-distribution - Histogram bin data
+router.get('/analytics/tuition-distribution', async (req, res) => {
+  try {
+    const cacheKey = 'tuition-distribution';
+
+    // Check cache first (5-minute TTL)
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      setCacheHeaders(res, 300);
+      res.set('X-Cache-Status', 'HIT');
+      return res.json(cached);
+    }
+
+    setCacheHeaders(res, 300);
+    res.set('X-Cache-Status', 'MISS');
+
+    // Get all successful results
+    const results = await sql`
+      SELECT tuition_amount
+      FROM extraction_results
+      WHERE status = 'Success'
+        AND tuition_amount IS NOT NULL
+    `;
+
+    // Parse tuition amounts
+    const tuitionValues = results
+      .map(r => parseFloat(r.tuition_amount.replace(/[^0-9.]/g, '') || '0'))
+      .filter(t => t > 0);
+
+    // Calculate histogram bins
+    const bins = [
+      { range: '0-30k', min: 0, max: 30000, count: 0 },
+      { range: '30-50k', min: 30000, max: 50000, count: 0 },
+      { range: '50-70k', min: 50000, max: 70000, count: 0 },
+      { range: '70k+', min: 70000, max: Infinity, count: 0 }
+    ];
+
+    tuitionValues.forEach(tuition => {
+      const bin = bins.find(b => tuition >= b.min && tuition < b.max);
+      if (bin) bin.count++;
+    });
+
+    // Calculate percentages
+    const total = tuitionValues.length;
+    const binsWithPercentage = bins.map(b => ({
+      range: b.range,
+      count: b.count,
+      percentage: total > 0 ? parseFloat(((b.count / total) * 100).toFixed(1)) : 0
+    }));
+
+    const response = { bins: binsWithPercentage };
+
+    // Cache for 5 minutes
+    cache.set(cacheKey, response, 5 * 60 * 1000);
+
+    res.json(response);
+  } catch (error) {
+    logger.error('Error fetching tuition distribution', error);
+    res.status(500).json({ error: 'Failed to fetch tuition distribution' });
+  }
+});
+
+// GET /api/analytics/data-quality - Health metrics
+router.get('/analytics/data-quality', async (req, res) => {
+  try {
+    const cacheKey = 'data-quality-metrics';
+
+    // Check cache first (5-minute TTL)
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      setCacheHeaders(res, 300);
+      res.set('X-Cache-Status', 'HIT');
+      return res.json(cached);
+    }
+
+    setCacheHeaders(res, 300);
+    res.set('X-Cache-Status', 'MISS');
+
+    // Get status breakdown
+    const statusResults = await sql`
+      SELECT
+        status,
+        COUNT(*) as count
+      FROM extraction_results
+      GROUP BY status
+    `;
+
+    const statusBreakdown = {};
+    let totalCount = 0;
+    let successCount = 0;
+    let failedCount = 0;
+    let pendingCount = 0;
+    let flaggedCount = 0;
+
+    statusResults.forEach(r => {
+      const count = parseInt(r.count);
+      statusBreakdown[r.status] = count;
+      totalCount += count;
+
+      if (r.status === 'Success') successCount = count;
+      if (r.status === 'Failed') failedCount = count;
+      if (r.status === 'Pending') pendingCount = count;
+    });
+
+    // Get flagged count
+    const [flaggedResult] = await sql`
+      SELECT COUNT(*) as count
+      FROM extraction_results
+      WHERE is_flagged = true
+    `;
+    flaggedCount = parseInt(flaggedResult.count);
+
+    // Calculate average age of extractions
+    const [ageResult] = await sql`
+      SELECT AVG(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - extracted_at)) / 86400) as avg_days
+      FROM extraction_results
+      WHERE extracted_at IS NOT NULL
+    `;
+    const staleDays = Math.round(parseFloat(ageResult.avg_days) || 0);
+
+    const successRate = totalCount > 0 ? parseFloat(((successCount / totalCount) * 100).toFixed(1)) : 0;
+
+    const dataQuality = {
+      successRate,
+      staleDays,
+      flaggedCount,
+      failedCount,
+      pendingCount,
+      statusBreakdown
+    };
+
+    // Cache for 5 minutes
+    cache.set(cacheKey, dataQuality, 5 * 60 * 1000);
+
+    res.json(dataQuality);
+  } catch (error) {
+    logger.error('Error fetching data quality metrics', error);
+    res.status(500).json({ error: 'Failed to fetch data quality metrics' });
+  }
+});
+
+// GET /api/analytics/recent-activity - Last 30 days extraction trend
+router.get('/analytics/recent-activity', async (req, res) => {
+  try {
+    const cacheKey = 'recent-activity-trend';
+
+    // Check cache first (5-minute TTL)
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      setCacheHeaders(res, 300);
+      res.set('X-Cache-Status', 'HIT');
+      return res.json(cached);
+    }
+
+    setCacheHeaders(res, 300);
+    res.set('X-Cache-Status', 'MISS');
+
+    // Get daily extraction counts for last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const results = await sql`
+      SELECT
+        DATE(extracted_at) as date,
+        COUNT(*) as total_count,
+        COUNT(*) FILTER (WHERE status = 'Success') as success_count,
+        COUNT(*) FILTER (WHERE status IN ('Failed', 'Not Found')) as failure_count
+      FROM extraction_results
+      WHERE extracted_at >= ${thirtyDaysAgo.toISOString()}
+      GROUP BY DATE(extracted_at)
+      ORDER BY date ASC
+    `;
+
+    const activityData = results.map(r => ({
+      date: r.date,
+      successCount: parseInt(r.success_count),
+      failureCount: parseInt(r.failure_count),
+      totalCount: parseInt(r.total_count)
+    }));
+
+    const response = { data: activityData };
+
+    // Cache for 5 minutes
+    cache.set(cacheKey, response, 5 * 60 * 1000);
+
+    res.json(response);
+  } catch (error) {
+    logger.error('Error fetching recent activity', error);
+    res.status(500).json({ error: 'Failed to fetch recent activity' });
+  }
+});
+
 // GET analytics data for a project (US1.1 - Statistics Cards)
 // Sprint 5: Performance Optimization - Added response caching
 router.get('/analytics/:projectId', async (req, res) => {
