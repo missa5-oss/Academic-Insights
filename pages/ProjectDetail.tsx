@@ -143,12 +143,6 @@ export const ProjectDetail: React.FC = () => {
       })
       .sort((a, b) => b.amount - a.amount); // Sort high to low
 
-    const confidenceData = [
-      { name: 'High', value: filteredResults.filter(r => r.confidence_score === ConfidenceScore.HIGH).length, color: '#007567' }, // Carey Teal
-      { name: 'Medium', value: filteredResults.filter(r => r.confidence_score === ConfidenceScore.MEDIUM).length, color: '#A19261' }, // JHU Gold
-      { name: 'Low', value: filteredResults.filter(r => r.confidence_score === ConfidenceScore.LOW).length, color: '#CF4520' }, // Accent Alert
-    ].filter(d => d.value > 0);
-
     // Chart data for US1.3 - Status Distribution
     const statusData = [
       { name: 'Success', value: filteredResults.filter(r => r.status === ExtractionStatus.SUCCESS).length, color: '#22c55e' },
@@ -182,7 +176,6 @@ export const ProjectDetail: React.FC = () => {
     // Real trends data is now fetched from backend (US1.2)
     return {
       pricing: validData,
-      confidence: confidenceData,
       status: statusData,
       stem: stemData,
       costPerCredit: costPerCreditData
@@ -333,11 +326,46 @@ export const ProjectDetail: React.FC = () => {
     prevProjectIdRef.current = id;
   }, [id]);
 
-  // Auto-expand banner when analysis is generated
+  // Load cached summary from backend on mount
+  const hasMountLoadedRef = React.useRef(false);
   React.useEffect(() => {
-    if (aiAnalysis) {
+    if (!project?.id) return;
+    hasMountLoadedRef.current = false;
+
+    const loadCachedSummary = async () => {
+      try {
+        const history = await fetchAnalysisHistory(project.id, 1);
+        if (history && history.length > 0) {
+          const latest = history[0];
+          setAiAnalysis(latest.analysis_content);
+          if (latest.metrics) {
+            setSummaryMetrics(latest.metrics);
+          }
+          hasMountLoadedRef.current = true;
+          // Keep collapsed when loaded from cache
+        }
+        // Also load full history
+        loadAnalysisHistory(project.id);
+      } catch (error) {
+        console.error('Error loading cached summary:', error);
+      }
+    };
+
+    loadCachedSummary();
+  }, [project?.id]);
+
+  // Auto-expand banner when analysis is freshly generated (not from cache)
+  const prevAiAnalysisRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (aiAnalysis && prevAiAnalysisRef.current !== aiAnalysis && !hasMountLoadedRef.current) {
       setIsAnalysisExpanded(true);
     }
+    // After the first mount-loaded analysis, reset the flag so future generations expand
+    if (hasMountLoadedRef.current && prevAiAnalysisRef.current !== null && prevAiAnalysisRef.current !== aiAnalysis) {
+      // This means a new analysis was generated after mount load
+      setIsAnalysisExpanded(true);
+    }
+    prevAiAnalysisRef.current = aiAnalysis;
   }, [aiAnalysis]);
 
   // US1.4 - Export Functions
@@ -785,102 +813,6 @@ export const ProjectDetail: React.FC = () => {
              <Download size={16} /> Export
            </button>
         </div>
-      </div>
-
-      {/* Persistent AI Analysis Banner - Always Visible */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl shadow-lg overflow-hidden">
-        {/* Banner Header - Always shown, clickable to expand/collapse */}
-        <button
-          onClick={() => setIsAnalysisExpanded(!isAnalysisExpanded)}
-          className="w-full px-6 py-4 flex items-center justify-between text-white hover:bg-slate-600/30 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <Bot className="text-emerald-400" size={24} />
-            <div className="text-left">
-              <h3 className="font-semibold text-lg">Executive Summary</h3>
-              <p className="text-slate-300 text-sm">
-                {aiAnalysis ? 'AI-generated market analysis' : 'Click "AI Analysis" button to generate'}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Status indicator */}
-            {isAnalyzing && (
-              <span className="bg-amber-500/20 text-amber-300 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5">
-                <RefreshCw className="animate-spin" size={12} />
-                Generating...
-              </span>
-            )}
-            {aiAnalysis && !isAnalyzing && (
-              <span className="bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full text-xs font-medium">
-                Generated
-              </span>
-            )}
-            <ChevronDown
-              className={`text-slate-300 transition-transform duration-200 ${isAnalysisExpanded ? 'rotate-180' : ''}`}
-              size={20}
-            />
-          </div>
-        </button>
-
-        {/* Expandable Content */}
-        {isAnalysisExpanded && (
-          <div className="border-t border-slate-600">
-            {aiAnalysis ? (
-              <div className="p-6 bg-white">
-                {/* Copy Button */}
-                <div className="flex justify-end mb-4">
-                  <button
-                    onClick={handleCopyAnalysis}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-slate-100 border border-slate-200 hover:border-slate-300 hover:bg-slate-200 transition-all"
-                    title="Copy analysis to clipboard"
-                  >
-                    {copiedAnalysis ? (
-                      <>
-                        <CheckIcon size={16} className="text-green-600" />
-                        <span className="text-green-600 font-medium">Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy size={16} className="text-slate-600" />
-                        <span className="text-slate-600">Copy to Clipboard</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Styled HTML content with markdown */}
-                <div className="prose prose-slate prose-lg max-w-none
-                                prose-headings:text-slate-800 prose-headings:font-bold
-                                prose-h1:text-2xl prose-h1:border-b prose-h1:border-slate-200 prose-h1:pb-3 prose-h1:mb-4
-                                prose-h2:text-xl prose-h2:text-slate-700 prose-h2:mt-8 prose-h2:mb-4
-                                prose-h3:text-lg prose-h3:text-slate-600 prose-h3:mt-6 prose-h3:mb-3
-                                prose-table:border-collapse prose-table:w-full prose-table:my-4
-                                prose-th:bg-slate-100 prose-th:p-3 prose-th:text-left prose-th:font-semibold prose-th:text-slate-700 prose-th:border prose-th:border-slate-200
-                                prose-td:p-3 prose-td:border prose-td:border-slate-200 prose-td:text-slate-600
-                                prose-strong:text-slate-800
-                                prose-p:text-slate-600 prose-p:leading-relaxed prose-p:my-3">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiAnalysis}</ReactMarkdown>
-                </div>
-
-                {/* Metadata Footer */}
-                {analysisHistory.length > 0 && (
-                  <div className="mt-6 pt-4 border-t border-slate-200 text-sm text-slate-500">
-                    {analysisHistory.length} previous analysis versions available
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="p-10 bg-slate-50 text-center">
-                <Bot className="mx-auto text-slate-300 mb-4" size={56} />
-                <p className="text-slate-600 font-medium text-lg">No analysis generated yet</p>
-                <p className="text-slate-400 text-sm mt-2 max-w-md mx-auto">
-                  Click the "AI Analysis" button in the header to generate an executive summary of your tuition data
-                </p>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Controls & Tabs */}
@@ -1358,41 +1290,9 @@ export const ProjectDetail: React.FC = () => {
                 </div>
               )}
            </div>
-
-           {/* Chart 2: Confidence & Health */}
-           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-              <h3 className="font-semibold text-slate-900 mb-4">Data Confidence Distribution</h3>
-              {chartData.confidence.length > 0 ? (
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RePieChart>
-                      <Pie
-                        data={chartData.confidence}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={100}
-                        paddingAngle={5}
-                        dataKey="value"
-                      >
-                        {chartData.confidence.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
-                      <Legend verticalAlign="bottom" height={36}/>
-                    </RePieChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="h-80 flex items-center justify-center text-slate-400 italic">
-                  Run extraction to see confidence metrics
-                </div>
-              )}
-           </div>
           </div>
 
-          {/* Chart 3: Tuition Trends Over Time (US1.2) */}
+          {/* Chart 2: Tuition Trends Over Time (US1.2) */}
           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-slate-900">Tuition Trends Over Time</h3>
@@ -1547,6 +1447,102 @@ export const ProjectDetail: React.FC = () => {
         </div>
       </div>
       )}
+
+      {/* Persistent AI Analysis Banner - Below Main Content */}
+      <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl shadow-lg overflow-hidden">
+        {/* Banner Header - Always shown, clickable to expand/collapse */}
+        <button
+          onClick={() => setIsAnalysisExpanded(!isAnalysisExpanded)}
+          className="w-full px-6 py-4 flex items-center justify-between text-white hover:bg-slate-600/30 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <Bot className="text-emerald-400" size={24} />
+            <div className="text-left">
+              <h3 className="font-semibold text-lg">Executive Summary</h3>
+              <p className="text-slate-300 text-sm">
+                {aiAnalysis ? 'AI-generated market analysis' : 'Click "AI Analysis" button to generate'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Status indicator */}
+            {isAnalyzing && (
+              <span className="bg-amber-500/20 text-amber-300 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5">
+                <RefreshCw className="animate-spin" size={12} />
+                Generating...
+              </span>
+            )}
+            {aiAnalysis && !isAnalyzing && (
+              <span className="bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full text-xs font-medium">
+                Generated
+              </span>
+            )}
+            <ChevronDown
+              className={`text-slate-300 transition-transform duration-200 ${isAnalysisExpanded ? 'rotate-180' : ''}`}
+              size={20}
+            />
+          </div>
+        </button>
+
+        {/* Expandable Content */}
+        {isAnalysisExpanded && (
+          <div className="border-t border-slate-600">
+            {aiAnalysis ? (
+              <div className="p-6 bg-white">
+                {/* Copy Button */}
+                <div className="flex justify-end mb-4">
+                  <button
+                    onClick={handleCopyAnalysis}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-slate-100 border border-slate-200 hover:border-slate-300 hover:bg-slate-200 transition-all"
+                    title="Copy analysis to clipboard"
+                  >
+                    {copiedAnalysis ? (
+                      <>
+                        <CheckIcon size={16} className="text-green-600" />
+                        <span className="text-green-600 font-medium">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={16} className="text-slate-600" />
+                        <span className="text-slate-600">Copy to Clipboard</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Styled HTML content with markdown */}
+                <div className="prose prose-slate prose-lg max-w-none
+                                prose-headings:text-slate-800 prose-headings:font-bold
+                                prose-h1:text-2xl prose-h1:border-b prose-h1:border-slate-200 prose-h1:pb-3 prose-h1:mb-4
+                                prose-h2:text-xl prose-h2:text-slate-700 prose-h2:mt-8 prose-h2:mb-4
+                                prose-h3:text-lg prose-h3:text-slate-600 prose-h3:mt-6 prose-h3:mb-3
+                                prose-table:border-collapse prose-table:w-full prose-table:my-4
+                                prose-th:bg-slate-100 prose-th:p-3 prose-th:text-left prose-th:font-semibold prose-th:text-slate-700 prose-th:border prose-th:border-slate-200
+                                prose-td:p-3 prose-td:border prose-td:border-slate-200 prose-td:text-slate-600
+                                prose-strong:text-slate-800
+                                prose-p:text-slate-600 prose-p:leading-relaxed prose-p:my-3">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiAnalysis}</ReactMarkdown>
+                </div>
+
+                {/* Metadata Footer */}
+                {analysisHistory.length > 0 && (
+                  <div className="mt-6 pt-4 border-t border-slate-200 text-sm text-slate-500">
+                    {analysisHistory.length} previous analysis versions available
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-10 bg-slate-50 text-center">
+                <Bot className="mx-auto text-slate-300 mb-4" size={56} />
+                <p className="text-slate-600 font-medium text-lg">No analysis generated yet</p>
+                <p className="text-slate-400 text-sm mt-2 max-w-md mx-auto">
+                  Click the "AI Analysis" button in the header to generate an executive summary of your tuition data
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Modals - Lazy loaded for performance */}
       {selectedResult && isAuditOpen && (
