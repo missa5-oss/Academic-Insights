@@ -86,6 +86,7 @@ export const ProjectDetail: React.FC = () => {
     lowestTuition: { amount: string; school: string; program: string } | null;
     totalPrograms: number;
     successRate: number;
+    avgProgramLength: number;
     stemPrograms: number;
     nonStemPrograms: number;
     totalResults: number;
@@ -108,6 +109,9 @@ export const ProjectDetail: React.FC = () => {
   const [editingTuitionValue, setEditingTuitionValue] = useState<string>('');
   const [editingAcademicYearId, setEditingAcademicYearId] = useState<string | null>(null);
   const [editingAcademicYearValue, setEditingAcademicYearValue] = useState<string>('');
+  const [editingSchoolId, setEditingSchoolId] = useState<string | null>(null);
+  const [editingSchoolValue, setEditingSchoolValue] = useState<string>('');
+  const [editingProgramValue, setEditingProgramValue] = useState<string>('');
 
   // --- Confirmation Dialog State ---
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -704,6 +708,28 @@ export const ProjectDetail: React.FC = () => {
     setEditingAcademicYearValue('');
   };
 
+  // --- School/Program Editing Handlers ---
+  const handleStartEditSchool = (result: ExtractionResult) => {
+    setEditingSchoolId(result.id);
+    setEditingSchoolValue(result.school_name);
+    setEditingProgramValue(result.program_name);
+  };
+
+  const handleSaveSchool = (resultId: string) => {
+    if (editingSchoolValue.trim() && editingProgramValue.trim()) {
+      updateResult(resultId, { school_name: editingSchoolValue.trim(), program_name: editingProgramValue.trim() });
+    }
+    setEditingSchoolId(null);
+    setEditingSchoolValue('');
+    setEditingProgramValue('');
+  };
+
+  const handleCancelEditSchool = () => {
+    setEditingSchoolId(null);
+    setEditingSchoolValue('');
+    setEditingProgramValue('');
+  };
+
   const handleToggleFlag = (result: ExtractionResult) => {
     updateResult(result.id, { is_flagged: !result.is_flagged });
   };
@@ -735,8 +761,20 @@ export const ProjectDetail: React.FC = () => {
         location_data: locationData,
         extraction_date: new Date().toISOString().split('T')[0]
       });
+
+      // Refresh paginated data so the table shows the updated version
+      refreshPaginatedResults();
+
+      toast.success(
+        'Price Updated',
+        `New price tracked for ${result.school_name} - ${result.program_name}`
+      );
     } catch (error) {
       console.error('Error tracking price update:', error);
+      toast.error(
+        'Update Failed',
+        `Could not track price update for ${result.school_name}. Please try again.`
+      );
     } finally {
       setProcessingItems(prev => ({ ...prev, [resultId]: false }));
     }
@@ -938,17 +976,68 @@ export const ProjectDetail: React.FC = () => {
                         />
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div>
-                          <div className="font-medium text-slate-900">{result.school_name}</div>
-                          <div className="text-xs text-slate-500 mt-0.5">{result.program_name}</div>
+                      {editingSchoolId === result.id ? (
+                        <div className="flex flex-col gap-1.5">
+                          <input
+                            type="text"
+                            value={editingSchoolValue}
+                            onChange={(e) => setEditingSchoolValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveSchool(result.id);
+                              if (e.key === 'Escape') handleCancelEditSchool();
+                            }}
+                            className="px-2 py-1 border border-slate-300 rounded text-sm font-medium focus:outline-none focus:ring-2 focus:ring-jhu-heritage"
+                            placeholder="School name"
+                            autoFocus
+                          />
+                          <input
+                            type="text"
+                            value={editingProgramValue}
+                            onChange={(e) => setEditingProgramValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveSchool(result.id);
+                              if (e.key === 'Escape') handleCancelEditSchool();
+                            }}
+                            className="px-2 py-1 border border-slate-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-jhu-heritage"
+                            placeholder="Program name"
+                          />
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleSaveSchool(result.id)}
+                              className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                              title="Save"
+                            >
+                              <Check size={16} />
+                            </button>
+                            <button
+                              onClick={handleCancelEditSchool}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Cancel"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
                         </div>
-                        {result.extraction_version > 1 && (
-                          <span className="px-2 py-0.5 bg-blue-100 text-jhu-heritage text-xs font-semibold rounded">
-                            v{result.extraction_version}
-                          </span>
-                        )}
-                      </div>
+                      ) : (
+                        <div className="flex items-center gap-2 group/school">
+                          <div>
+                            <div className="font-medium text-slate-900">{result.school_name}</div>
+                            <div className="text-xs text-slate-500 mt-0.5">{result.program_name}</div>
+                          </div>
+                          {result.extraction_version > 1 && (
+                            <span className="px-2 py-0.5 bg-blue-100 text-jhu-heritage text-xs font-semibold rounded">
+                              v{result.extraction_version}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => handleStartEditSchool(result)}
+                            className="p-1 text-slate-400 hover:text-jhu-heritage hover:bg-blue-50 rounded transition-colors opacity-0 group-hover/school:opacity-100"
+                            title="Edit School / Program"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       {editingTuitionId === result.id ? (
@@ -1250,10 +1339,10 @@ export const ProjectDetail: React.FC = () => {
                 trend="down"
               />
               <StatCard
-                title="Success Rate"
-                value={`${analyticsData.successRate}%`}
-                subtitle={`${analyticsData.totalResults} total extractions`}
-                icon={<Target size={20} className="text-blue-600" />}
+                title="Avg Program Length"
+                value={analyticsData.avgProgramLength ? `${analyticsData.avgProgramLength} mo` : 'N/A'}
+                subtitle={`Across ${analyticsData.totalPrograms} programs`}
+                icon={<Clock size={20} className="text-blue-600" />}
               />
             </div>
           ) : null}
@@ -1448,7 +1537,8 @@ export const ProjectDetail: React.FC = () => {
       </div>
       )}
 
-      {/* Persistent AI Analysis Banner - Below Main Content */}
+      {/* AI Analysis Banner - Only shown in Market Analysis view */}
+      {viewMode === 'analysis' && (
       <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl shadow-lg overflow-hidden">
         {/* Banner Header - Always shown, clickable to expand/collapse */}
         <button
@@ -1543,6 +1633,7 @@ export const ProjectDetail: React.FC = () => {
           </div>
         )}
       </div>
+      )}
 
       {/* Modals - Lazy loaded for performance */}
       {selectedResult && isAuditOpen && (
@@ -1590,6 +1681,11 @@ export const ProjectDetail: React.FC = () => {
             }}
             resultId={historyResultId}
             onTrackUpdate={() => handleTrackPriceUpdate(historyResultId)}
+            onAudit={(version) => {
+              setIsHistoryOpen(false);
+              setHistoryResultId(null);
+              handleAudit(version);
+            }}
           />
         </Suspense>
       )}

@@ -292,6 +292,7 @@ router.post('/bulk', validateBulkResults, quotaGuard, async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const {
+      school_name, program_name,
       tuition_amount, tuition_period, academic_year, cost_per_credit,
       total_credits, program_length, remarks, location_data,
       confidence_score, status, source_url, validated_sources,
@@ -303,6 +304,8 @@ router.put('/:id', async (req, res) => {
     const [result] = await sql`
       UPDATE extraction_results
       SET
+        school_name = COALESCE(${school_name}, school_name),
+        program_name = COALESCE(${program_name}, program_name),
         tuition_amount = COALESCE(${tuition_amount}, tuition_amount),
         tuition_period = COALESCE(${tuition_period}, tuition_period),
         academic_year = COALESCE(${academic_year}, academic_year),
@@ -967,7 +970,8 @@ router.get('/analytics/:projectId', async (req, res) => {
         tuition_amount,
         status,
         confidence_score,
-        is_stem
+        is_stem,
+        program_length
       FROM extraction_results
       WHERE project_id = ${projectId}
         AND status = 'Success'
@@ -984,6 +988,7 @@ router.get('/analytics/:projectId', async (req, res) => {
         lowestTuition: null,
         totalPrograms: 0,
         successRate: 0,
+        avgProgramLength: 0,
         stemPrograms: 0,
         nonStemPrograms: 0,
         totalResults: 0
@@ -998,12 +1003,17 @@ router.get('/analytics/:projectId', async (req, res) => {
         .filter(r => r.parsedAmount > 0);
 
       if (tuitionValues.length === 0) {
+        const programLengths = results.filter(r => r.program_length && parseFloat(r.program_length) > 0);
+        const avgProgramLength = programLengths.length > 0
+          ? Math.round(programLengths.reduce((sum, r) => sum + parseFloat(r.program_length), 0) / programLengths.length)
+          : 0;
         analyticsData = {
           avgTuition: 0,
           highestTuition: null,
           lowestTuition: null,
           totalPrograms: results.length,
           successRate: 0,
+          avgProgramLength,
           stemPrograms: results.filter(r => r.is_stem).length,
           nonStemPrograms: results.filter(r => !r.is_stem).length,
           totalResults: results.length
@@ -1034,6 +1044,12 @@ router.get('/analytics/:projectId', async (req, res) => {
         const stemPrograms = results.filter(r => r.is_stem).length;
         const nonStemPrograms = results.filter(r => !r.is_stem).length;
 
+        // Calculate average program length
+        const programLengths = results.filter(r => r.program_length && parseFloat(r.program_length) > 0);
+        const avgProgramLength = programLengths.length > 0
+          ? Math.round(programLengths.reduce((sum, r) => sum + parseFloat(r.program_length), 0) / programLengths.length)
+          : 0;
+
         analyticsData = {
           avgTuition,
           highestTuition: {
@@ -1048,6 +1064,7 @@ router.get('/analytics/:projectId', async (req, res) => {
           },
           totalPrograms: results.length,
           successRate,
+          avgProgramLength,
           stemPrograms,
           nonStemPrograms,
           totalResults

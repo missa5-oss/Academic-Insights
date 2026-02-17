@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, History, TrendingUp, TrendingDown, Minus, Calendar } from 'lucide-react';
+import { X, History, TrendingUp, TrendingDown, Minus, Calendar, Eye } from 'lucide-react';
 import { ExtractionResult } from '../types';
 import { useApp } from '../context/AppContext';
 
@@ -8,9 +8,10 @@ interface HistoryModalProps {
   onClose: () => void;
   resultId: string;
   onTrackUpdate: () => void;
+  onAudit?: (result: ExtractionResult) => void;
 }
 
-export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose, resultId, onTrackUpdate }) => {
+export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose, resultId, onTrackUpdate, onAudit }) => {
   const { getResultHistory } = useApp();
   const [history, setHistory] = useState<ExtractionResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -121,6 +122,15 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose, res
                           </span>
                         )}
                       </div>
+                      {onAudit && (
+                        <button
+                          onClick={() => onAudit(version)}
+                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors"
+                          title={`Audit v${version.extraction_version} data`}
+                        >
+                          <Eye className="w-3.5 h-3.5" /> Audit
+                        </button>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 mb-3">
