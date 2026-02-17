@@ -453,7 +453,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
    */
   const getCrossProjectAnalytics = async (): Promise<CrossProjectAnalytics | null> => {
     try {
-      const response = await fetch(`${API_URL}/api/analytics/cross-project`);
+      const response = await fetch(`${API_URL}/api/results/analytics/cross-project`);
       if (response.ok) {
         return await response.json();
       }
@@ -471,7 +471,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
    */
   const getMarketPositionData = async (): Promise<MarketPositionData[]> => {
     try {
-      const response = await fetch(`${API_URL}/api/analytics/market-position`);
+      const response = await fetch(`${API_URL}/api/results/analytics/market-position`);
       if (response.ok) {
         const result = await response.json();
         return result.data || [];
@@ -489,7 +489,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
    */
   const getTuitionDistribution = async (): Promise<TuitionDistributionBin[]> => {
     try {
-      const response = await fetch(`${API_URL}/api/analytics/tuition-distribution`);
+      const response = await fetch(`${API_URL}/api/results/analytics/tuition-distribution`);
       if (response.ok) {
         const result = await response.json();
         return result.bins || [];
@@ -507,7 +507,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
    */
   const getDataQuality = async (): Promise<DataQualityMetrics | null> => {
     try {
-      const response = await fetch(`${API_URL}/api/analytics/data-quality`);
+      const response = await fetch(`${API_URL}/api/results/analytics/data-quality`);
       if (response.ok) {
         return await response.json();
       }
@@ -524,7 +524,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
    */
   const getRecentActivity = async (): Promise<ActivityTrendData[]> => {
     try {
-      const response = await fetch(`${API_URL}/api/analytics/recent-activity`);
+      const response = await fetch(`${API_URL}/api/results/analytics/recent-activity`);
       if (response.ok) {
         const result = await response.json();
         return result.data || [];

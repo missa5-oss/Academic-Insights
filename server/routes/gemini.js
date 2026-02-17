@@ -1438,7 +1438,7 @@ router.post('/chat', validateChat, async (req, res) => {
       .join('\n');
 
     const systemInstruction = `
-    You are the "Academica AI Analyst". You are analyzing a specific dataset of university tuition fees with comprehensive data.
+    You are the "JHU Carey Tuition Intelligence AI Analyst". You are analyzing a specific dataset of university tuition fees with comprehensive data.
 
     DATASET SUMMARY:
     - Total Programs: ${enhancedContext.length}

@@ -12,7 +12,7 @@ export const APP_VERSION = '1.4.0';
 export const APP_NAME = 'Academic-Insights';
 
 // Internal product name
-export const PRODUCT_NAME = 'Academica';
+export const PRODUCT_NAME = 'JHU Carey Tuition Intelligence';
 
 // API Configuration
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';

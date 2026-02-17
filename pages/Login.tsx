@@ -21,14 +21,14 @@ export const Login: React.FC = () => {
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
           <div className="w-12 h-12 bg-jhu-heritage rounded-xl flex items-center justify-center shadow-lg">
-            <span className="font-bold text-white text-2xl">A</span>
+            <span className="font-bold text-white text-2xl">C</span>
           </div>
         </div>
-        <h2 className="mt-6 text-center text-4xl font-bold text-jhu-heritage">
-          Academica
+        <h2 className="mt-6 text-center text-3xl font-bold text-jhu-heritage">
+          JHU Carey Tuition Intelligence
         </h2>
         <p className="mt-2 text-center text-base text-slate-600">
-          Tuition Intelligence Platform
+          Market Intelligence Platform
         </p>
       </div>
 
@@ -130,7 +130,7 @@ export const Login: React.FC = () => {
           
           <div className="mt-6 flex items-start gap-3 p-3 bg-blue-50 rounded-lg text-xs text-blue-800">
              <ShieldCheck size={16} className="mt-0.5 flex-shrink-0" />
-             <p>Academica is in Phase 3. Authentication is enabled. Use the simulation buttons above to test different role permissions.</p>
+             <p>JHU Carey Tuition Intelligence is in Phase 3. Authentication is enabled. Use the simulation buttons above to test different role permissions.</p>
           </div>
         </div>
       </div>

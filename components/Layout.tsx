@@ -27,9 +27,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="p-6 border-b border-slate-700">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-jhu-heritage rounded-lg flex items-center justify-center">
-              <span className="font-bold text-white text-lg">A</span>
+              <span className="font-bold text-white text-lg">C</span>
             </div>
-            <h1 className="text-xl font-bold tracking-tight">Academica</h1>
+            <h1 className="text-lg font-bold tracking-tight">JHU Carey</h1>
           </div>
           <p className="text-xs text-slate-400 mt-2 uppercase tracking-wider">Tuition Intelligence</p>
         </div>
